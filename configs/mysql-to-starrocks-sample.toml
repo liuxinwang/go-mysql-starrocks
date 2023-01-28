@@ -1,0 +1,23 @@
+[mysql]
+host = "127.0.0.1"
+port = 3306
+username = "root"
+password = ""
+
+[starrocks]
+host = "127.0.0.1"
+port = 8040
+username = "root"
+password = ""
+
+[[rule]]
+source-schema = "test"
+source-table = "tb1"
+target-schema = "starrocks_test"
+target-table = "tb1"
+
+[[rule]]
+source-schema = "test"
+source-table = "tb2"
+target-schema = "starrocks_test"
+target-table = "tb2"
