@@ -1,4 +1,10 @@
-mysql 同步到 starrocks
+## mysql 同步到 starrocks
+
+![LICENSE](https://img.shields.io/badge/license-GPLv2%20-blue.svg)
+![](https://img.shields.io/github/languages/top/liuxinwang/go-mysql-starrocks)
+![](https://img.shields.io/badge/build-prerelease-brightgreen.svg)
+[![Release](https://img.shields.io/github/release/liuxinwang/go-mysql-starrocks.svg?style=flat-square)](https://github.com/liuxinwang/go-mysql-starrocks/releases)
+
 
 ### 使用说明
 #### 1. 修改配置文件
