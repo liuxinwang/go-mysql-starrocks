@@ -28,7 +28,7 @@ func (sr *Starrocks) Execute(events []*canal.RowsEvent, rule *rule.MysqlToSrRule
 	var jsonList []string
 
 	jsonList = sr.generateJSON(events)
-	log.Infof("starrocks bulk custom row data num: %d", len(jsonList))
+	log.Debugf("starrocks bulk custom row data num: %d", len(jsonList))
 	return sr.sendData(jsonList, table, rule)
 }
 
