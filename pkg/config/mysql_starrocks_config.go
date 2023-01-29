@@ -26,6 +26,7 @@ type MysqlSrConfig struct {
 	Mysql     *Mysql
 	Starrocks *Starrocks
 	Rules     []*rule.MysqlToSrRule `toml:"rule"`
+	Logger    *log.Logger
 }
 
 func (config *MysqlSrConfig) ReadMysqlSrConf(filename string) (*MysqlSrConfig, error) {

@@ -182,6 +182,7 @@ func NewMysql(conf *config.MysqlSrConfig) *MyEventHandler {
 	m := &Mysql{conf.Mysql}
 	cfg := m.initCanalCfg()
 	cfg.IncludeTableRegex = rule.NewMysqlToSrRule(conf.Rules)
+	cfg.Logger = conf.Logger
 
 	// 初始化canal
 	c, err := canal.NewCanal(cfg)

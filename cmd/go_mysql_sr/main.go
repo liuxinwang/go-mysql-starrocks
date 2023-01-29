@@ -13,7 +13,9 @@ import (
 func main() {
 	// 输入参数处理
 	help := utils.HelpInit()
-	log.SetLevelByName(*help.LogLevel)
+	// 日志初始化
+	l := utils.LogInit(*help.LogLevel)
+
 	// 进程信号处理
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,
@@ -23,12 +25,15 @@ func main() {
 		syscall.SIGINT,
 		syscall.SIGTERM,
 		syscall.SIGQUIT)
+
 	// 初始化配置
 	conf := config.NewMysqlSrConfig(help.ConfigFile)
+	conf.Logger = l
 
 	// 初始化mysql canal
 	h := input.NewMysql(conf)
 	c := h.C()
+
 	// Start canal
 	go c.StartFromGTID(h.AckGTIDSet())
 
