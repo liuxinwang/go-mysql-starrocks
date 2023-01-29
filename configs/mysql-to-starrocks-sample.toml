@@ -11,13 +11,13 @@ username = "root"
 password = ""
 
 [[rule]]
-source-schema = "test"
+source-schema = "mysql_test"
 source-table = "tb1"
 target-schema = "starrocks_test"
 target-table = "tb1"
 
 [[rule]]
-source-schema = "test"
+source-schema = "mysql_test"
 source-table = "tb2"
 target-schema = "starrocks_test"
 target-table = "tb2"
