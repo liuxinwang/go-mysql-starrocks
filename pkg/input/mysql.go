@@ -144,7 +144,7 @@ func (h *MyEventHandler) getMysqlGtidSet() mysql.GTIDSet {
 	var gs mysql.GTIDSet
 	var err error
 	if h.position.BinlogGTID == "" {
-		log.Infof("gtid_executed.toml para 'binlog-gtid' not exist")
+		log.Infof("%s param 'binlog-gtid' not exist", h.position.GetFilePath())
 		log.Infof("get the current gtid set value")
 		gs, err = h.c.GetMasterGTIDSet()
 		if err != nil {
@@ -204,7 +204,7 @@ func NewMysql(conf *config.MysqlSrConfig) *MyEventHandler {
 
 	// 获取gtidSet
 	// 加载mysql position
-	pos, err := position.LoadPosition()
+	pos, err := position.LoadPosition(conf)
 	if err != nil {
 		log.Fatal(err)
 	}

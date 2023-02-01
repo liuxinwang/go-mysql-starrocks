@@ -5,6 +5,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/siddontang/go-log/log"
 	"go-mysql-starrocks/pkg/rule"
+	"os"
 	"path/filepath"
 )
 
@@ -23,10 +24,12 @@ type Starrocks struct {
 }
 
 type MysqlSrConfig struct {
-	Mysql     *Mysql
-	Starrocks *Starrocks
-	Rules     []*rule.MysqlToSrRule `toml:"rule"`
-	Logger    *log.Logger
+	Name       string
+	Mysql      *Mysql
+	Starrocks  *Starrocks
+	Rules      []*rule.MysqlToSrRule `toml:"rule"`
+	Logger     *log.Logger
+	ConfigFile string
 }
 
 func (config *MysqlSrConfig) ReadMysqlSrConf(filename string) (*MysqlSrConfig, error) {
@@ -44,6 +47,14 @@ func NewMysqlSrConfig(configFile *string) *MysqlSrConfig {
 		log.Fatal(err)
 	}
 	c, err = c.ReadMysqlSrConf(fileName)
+	if err != nil {
+		log.Fatal(err)
+	}
+	if c.Name == "" {
+		log.Infof("The configuration file \"name\" variable cannot be empty")
+		os.Exit(0)
+	}
+	c.ConfigFile = fileName
 	if err != nil {
 		log.Fatal(err)
 	}

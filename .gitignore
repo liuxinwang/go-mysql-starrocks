@@ -5,3 +5,4 @@ configs/mysql-to-starrocks-local.toml
 build.sh
 error.log
 release/*
+TODO

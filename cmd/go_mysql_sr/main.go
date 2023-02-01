@@ -14,7 +14,7 @@ func main() {
 	// 输入参数处理
 	help := utils.HelpInit()
 	// 日志初始化
-	l := utils.LogInit(*help.LogLevel)
+	l := utils.LogInit(help)
 
 	// 进程信号处理
 	sc := make(chan os.Signal, 1)

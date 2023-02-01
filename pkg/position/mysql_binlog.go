@@ -8,12 +8,12 @@ import (
 	"github.com/juju/errors"
 	"github.com/siddontang/go-log/log"
 	"github.com/siddontang/go/ioutil2"
+	"go-mysql-starrocks/pkg/config"
 	"os"
+	"strings"
 	"sync"
 	"time"
 )
-
-var filePath = ".gtid_executed.toml"
 
 type Position struct {
 	sync.RWMutex
@@ -24,7 +24,11 @@ type Position struct {
 	lastSaveTime time.Time
 }
 
-func findFilePath() {
+func (pos *Position) GetFilePath() string {
+	return pos.filePath
+}
+
+func findFilePath(filePath string) {
 	_, err := os.Stat(filePath)
 	if err == nil {
 		return
@@ -41,13 +45,23 @@ func findFilePath() {
 	}
 }
 
-func LoadPosition() (*Position, error) {
+func getPositionFilePath(conf *config.MysqlSrConfig) string {
+	splits := strings.SplitAfter(conf.ConfigFile, "/")
+	lastIndex := len(splits) - 1
+	splits[lastIndex] = "_" + conf.Name + "-pos.info"
+	positionFileName := strings.Join(splits, "")
+	return positionFileName
+}
+
+func LoadPosition(conf *config.MysqlSrConfig) (*Position, error) {
 	var pos Position
 	var err error
-	findFilePath()
-	if _, err = toml.DecodeFile(filePath, &pos); err != nil {
+	positionFilePath := getPositionFilePath(conf)
+	findFilePath(positionFilePath)
+	if _, err = toml.DecodeFile(positionFilePath, &pos); err != nil {
 		return nil, errors.Trace(err)
 	}
+	pos.filePath = positionFilePath
 	return &pos, err
 }
 
@@ -65,8 +79,8 @@ func (pos *Position) Save(gtid mysql.GTIDSet) error {
 	e := toml.NewEncoder(&buf)
 	e.Encode(pos)
 	var err error
-	if err = ioutil2.WriteFileAtomic(filePath, buf.Bytes(), 0644); err != nil {
-		log.Errorf("canal save position to file %s err %v", filePath, err)
+	if err = ioutil2.WriteFileAtomic(pos.filePath, buf.Bytes(), 0644); err != nil {
+		log.Errorf("canal save position to file %s err %v", pos.filePath, err)
 	}
 	log.Debugf("save canal sync position gtid: %s", pos.BinlogGTID)
 	return errors.Trace(err)

@@ -10,6 +10,9 @@
 #### 1. 修改配置文件
 mysql-to-starrocks.toml
 ```toml
+# name 必填，多实例运行时需保证全局唯一
+name = "mysql2starrocks"
+
 [mysql] # mysql连接信息
 host = "127.0.0.1"
 port = 3306
@@ -36,15 +39,23 @@ target-table = "tb2"
 ```
 #### 2. 启动
 ```shell
-[sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml &
-[sr@ ~]$ exit
+[sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml
 ```
 #### 3. 查看日志
+默认输出到控制台
+
+指定log-file参数运行
 ```shell
-[sr@ ~]$ tail -f error.log
+[sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log
+[sr@ ~]$ tail -f mysql2starrocks.log
 ```
 
 #### 4. 查看帮助
 ```shell
 [sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -h
+```
+#### 5. 后台运行
+```shell
+[sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log &
+[sr@ ~]$ exit
 ```
