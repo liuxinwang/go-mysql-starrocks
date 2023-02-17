@@ -1,11 +1,12 @@
 package msg
 
 import (
-	"github.com/go-mysql-org/go-mysql/canal"
+	"github.com/go-mysql-org/go-mysql/schema"
 )
 
 type Msg struct {
-	*canal.RowsEvent
+	Table         *schema.Table
+	Action        string
 	IgnoreColumns []string
 	Data          map[string]interface{}
 	Old           map[string]interface{}

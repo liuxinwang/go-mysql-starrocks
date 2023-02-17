@@ -47,10 +47,11 @@ func (h *MyEventHandler) String() string {
 }
 
 func (h *MyEventHandler) OnRow(e *canal.RowsEvent) error {
-	log.Debugf("canal event: %s %v\n", e.Action, e.Rows)
-	msg := h.eventPreProcessing(e)
-	if !h.matcher.IterateFilter(msg) {
-		h.syncCh <- msg
+	msgs := h.eventPreProcessing(e)
+	for _, m := range msgs {
+		if !h.matcher.IterateFilter(m) {
+			h.syncCh <- m
+		}
 	}
 	return nil
 }
@@ -94,10 +95,10 @@ func (h *MyEventHandler) chanLoop() {
 				schemaTable := data.Table.Schema + ":" + data.Table.Name
 				rowsData, ok := schemaTableEvents[schemaTable]
 				if !ok {
-					schemaTableEvents[data.Table.Schema+":"+data.Table.Name] = make([]*msg.Msg, 0, 10240)
+					schemaTableEvents[schemaTable] = make([]*msg.Msg, 0, 10240)
 				}
-				schemaTableEvents[data.Table.Schema+":"+data.Table.Name] = append(rowsData, data)
-				eventsLen += len(data.Rows)
+				schemaTableEvents[schemaTable] = append(rowsData, data)
+				eventsLen += 1
 
 				if eventsLen >= 10240 {
 					needFlush = true
@@ -183,37 +184,58 @@ func (h *MyEventHandler) Cancel() context.CancelFunc {
 	return h.cancel
 }
 
-func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) *msg.Msg {
+func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 	data := make(map[string]interface{})
 	old := make(map[string]interface{})
+	var msgs []*msg.Msg
 	if e.Action == canal.InsertAction {
-		for i := 0; i < len(e.Table.Columns); i++ {
-			data[e.Table.Columns[i].Name] = e.Rows[0][i]
+		for _, row := range e.Rows {
+			for j := 0; j < len(e.Table.Columns); j++ {
+				data[e.Table.Columns[j].Name] = row[j]
+			}
+			log.Debugf("canal event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, row)
+			msgs = append(msgs, &msg.Msg{
+				Table:  e.Table,
+				Action: e.Action,
+				Data:   data,
+			})
+
 		}
-		return &msg.Msg{
-			RowsEvent: e,
-			Data:      data,
-		}
+		return msgs
 	}
 	if e.Action == canal.UpdateAction {
-		for i := 0; i < len(e.Table.Columns); i++ {
-			old[e.Table.Columns[i].Name] = e.Rows[0][i]
-			data[e.Table.Columns[i].Name] = e.Rows[1][i]
+		for i, row := range e.Rows {
+			if i%1 == 0 && i != 0 {
+				continue
+			}
+			for j := 0; j < len(e.Table.Columns); j++ {
+				old[e.Table.Columns[i].Name] = row[j]
+				data[e.Table.Columns[i].Name] = e.Rows[i+1][j]
+			}
+			log.Debugf("canal event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, row)
+			msgs = append(msgs, &msg.Msg{
+				Table:  e.Table,
+				Action: e.Action,
+				Data:   data,
+				Old:    old,
+			})
 		}
-		return &msg.Msg{
-			RowsEvent: e,
-			Data:      data,
-			Old:       old,
-		}
+		return msgs
 	}
 	if e.Action == canal.DeleteAction {
-		for i := 0; i < len(e.Table.Columns); i++ {
-			data[e.Table.Columns[i].Name] = e.Rows[0][i]
+		for _, row := range e.Rows {
+			for j := 0; j < len(e.Table.Columns); j++ {
+				data[e.Table.Columns[j].Name] = row[j]
+			}
+			log.Debugf("canal event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, row)
+			msgs = append(msgs, &msg.Msg{
+				Table:  e.Table,
+				Action: e.Action,
+				Data:   data,
+			})
+
 		}
-		return &msg.Msg{
-			RowsEvent: e,
-			Data:      data,
-		}
+		return msgs
 	}
 	return nil
 }
