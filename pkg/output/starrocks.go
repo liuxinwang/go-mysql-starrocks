@@ -9,6 +9,7 @@ import (
 	"github.com/pingcap/errors"
 	"github.com/siddontang/go-log/log"
 	"go-mysql-starrocks/pkg/config"
+	"go-mysql-starrocks/pkg/msg"
 	"go-mysql-starrocks/pkg/rule"
 	"io/ioutil"
 	"net/http"
@@ -21,58 +22,37 @@ type Starrocks struct {
 
 var tmpColumn = "_sl_optype"
 
-func (sr *Starrocks) Execute(events []*canal.RowsEvent, rule *rule.MysqlToSrRule, table *schema.Table) error {
-	if len(events) == 0 {
+func (sr *Starrocks) Execute(msgs []*msg.Msg, rule *rule.MysqlToSrRule, table *schema.Table) error {
+	if len(msgs) == 0 {
 		return nil
 	}
 	var jsonList []string
 
-	jsonList = sr.generateJSON(events)
+	jsonList = sr.generateJSON(msgs)
 	log.Debugf("starrocks bulk custom row data num: %d", len(jsonList))
-	return sr.sendData(jsonList, table, rule)
+	return sr.sendData(jsonList, table, rule, msgs[0].IgnoreColumns)
 }
 
-func (sr *Starrocks) generateJSON(events []*canal.RowsEvent) []string {
+func (sr *Starrocks) generateJSON(msgs []*msg.Msg) []string {
 	var jsonList []string
 
-	for _, event := range events {
+	for _, event := range msgs {
 		switch event.Action {
 		case canal.InsertAction:
-			dataMap := make(map[string]interface{})
-			for _, row := range event.Rows {
-				for j, column := range event.Table.Columns {
-					dataMap[column.Name] = row[j]
-				}
-				// 增加虚拟列，标识操作类型 (stream load opType：UPSERT 0，DELETE：1)
-				dataMap[tmpColumn] = 0
-				b, _ := json.Marshal(dataMap)
-				jsonList = append(jsonList, string(b))
-			}
+			// 增加虚拟列，标识操作类型 (stream load opType：UPSERT 0，DELETE：1)
+			event.Data[tmpColumn] = 0
+			b, _ := json.Marshal(event.Data)
+			jsonList = append(jsonList, string(b))
 		case canal.UpdateAction:
-			dataMap := make(map[string]interface{})
-			for i, row := range event.Rows {
-				if i == 0 || i%2 == 0 {
-					continue
-				}
-				for j, column := range event.Table.Columns {
-					dataMap[column.Name] = row[j]
-				}
-				// 增加虚拟列，标识操作类型 (stream load opType：UPSERT 0，DELETE：1)
-				dataMap[tmpColumn] = 0
-				b, _ := json.Marshal(dataMap)
-				jsonList = append(jsonList, string(b))
-			}
-		case canal.DeleteAction:
-			dataMap := make(map[string]interface{})
-			for _, row := range event.Rows {
-				for j, column := range event.Table.Columns {
-					dataMap[column.Name] = row[j]
-				}
-				// 增加虚拟列，标识操作类型 (stream load opType：UPSERT 0，DELETE：1)
-				dataMap[tmpColumn] = 1
-				b, _ := json.Marshal(dataMap)
-				jsonList = append(jsonList, string(b))
-			}
+			// 增加虚拟列，标识操作类型 (stream load opType：UPSERT 0，DELETE：1)
+			event.Data[tmpColumn] = 0
+			b, _ := json.Marshal(event.Data)
+			jsonList = append(jsonList, string(b))
+		case canal.DeleteAction: // starrocks2.4版本只支持primary key模型load delete
+			// 增加虚拟列，标识操作类型 (stream load opType：UPSERT 0，DELETE：1)
+			event.Data[tmpColumn] = 1
+			b, _ := json.Marshal(event.Data)
+			jsonList = append(jsonList, string(b))
 		}
 	}
 	return jsonList
@@ -86,7 +66,7 @@ func (sr *Starrocks) auth() string {
 	return sEnc
 }
 
-func (sr *Starrocks) sendData(content []string, table *schema.Table, rule *rule.MysqlToSrRule) error {
+func (sr *Starrocks) sendData(content []string, table *schema.Table, rule *rule.MysqlToSrRule, ignoreColumns []string) error {
 	client := &http.Client{
 		/** CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			req.Header.Add("Authorization", "Basic "+sr.auth())
@@ -106,6 +86,9 @@ func (sr *Starrocks) sendData(content []string, table *schema.Table, rule *rule.
 	req.Header.Add("strip_outer_array", "true")
 	var columnArray []string
 	for _, column := range table.Columns {
+		if sr.isContain(ignoreColumns, column.Name) {
+			continue
+		}
 		columnArray = append(columnArray, column.Name)
 	}
 	columnArray = append(columnArray, tmpColumn)
@@ -122,6 +105,18 @@ func (sr *Starrocks) sendData(content []string, table *schema.Table, rule *rule.
 		return errors.Trace(errors.New(msg.(string)))
 	}
 	return nil
+}
+
+func (sr *Starrocks) isContain(items []string, item string) bool {
+	if len(items) == 0 {
+		return false
+	}
+	for _, eachItem := range items {
+		if eachItem == item {
+			return true
+		}
+	}
+	return false
 }
 
 func (sr *Starrocks) parseResponse(response *http.Response) (map[string]interface{}, error) {

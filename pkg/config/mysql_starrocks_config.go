@@ -23,10 +23,16 @@ type Starrocks struct {
 	Password string
 }
 
+type Filter struct {
+	Type   string                 `toml:"type"`
+	Config map[string]interface{} `toml:"config"`
+}
+
 type MysqlSrConfig struct {
 	Name       string
 	Mysql      *Mysql
 	Starrocks  *Starrocks
+	Filter     []*Filter
 	Rules      []*rule.MysqlToSrRule `toml:"rule"`
 	Logger     *log.Logger
 	ConfigFile string

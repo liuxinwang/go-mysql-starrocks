@@ -7,6 +7,8 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/siddontang/go-log/log"
 	"go-mysql-starrocks/pkg/config"
+	"go-mysql-starrocks/pkg/filter"
+	"go-mysql-starrocks/pkg/msg"
 	"go-mysql-starrocks/pkg/output"
 	"go-mysql-starrocks/pkg/position"
 	"go-mysql-starrocks/pkg/rule"
@@ -29,6 +31,7 @@ type MyEventHandler struct {
 	cancel        context.CancelFunc
 	position      *position.Position
 	c             *canal.Canal
+	matcher       filter.BinlogFilterMatcher
 }
 
 func (m *Mysql) initCanalCfg() *canal.Config {
@@ -44,9 +47,11 @@ func (h *MyEventHandler) String() string {
 }
 
 func (h *MyEventHandler) OnRow(e *canal.RowsEvent) error {
-	// log.Infof("%s %v\n", e.Action, e.Rows)
-	h.syncCh <- e
-	log.Debugf("canal event: %s", e.String())
+	log.Debugf("canal event: %s %v\n", e.Action, e.Rows)
+	msg := h.eventPreProcessing(e)
+	if !h.matcher.IterateFilter(msg) {
+		h.syncCh <- msg
+	}
 	return nil
 }
 
@@ -79,17 +84,17 @@ func (h *MyEventHandler) chanLoop() {
 	defer ticker.Stop()
 
 	eventsLen := 0
-	schemaTableEvents := make(map[string][]*canal.RowsEvent)
+	schemaTableEvents := make(map[string][]*msg.Msg)
 	for {
 		needFlush := false
 		select {
 		case v := <-h.syncCh:
 			switch data := v.(type) {
-			case *canal.RowsEvent:
+			case *msg.Msg:
 				schemaTable := data.Table.Schema + ":" + data.Table.Name
 				rowsData, ok := schemaTableEvents[schemaTable]
 				if !ok {
-					schemaTableEvents[data.Table.Schema+":"+data.Table.Name] = make([]*canal.RowsEvent, 0, 10240)
+					schemaTableEvents[data.Table.Schema+":"+data.Table.Name] = make([]*msg.Msg, 0, 10240)
 				}
 				schemaTableEvents[data.Table.Schema+":"+data.Table.Name] = append(rowsData, data)
 				eventsLen += len(data.Rows)
@@ -178,6 +183,41 @@ func (h *MyEventHandler) Cancel() context.CancelFunc {
 	return h.cancel
 }
 
+func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) *msg.Msg {
+	data := make(map[string]interface{})
+	old := make(map[string]interface{})
+	if e.Action == canal.InsertAction {
+		for i := 0; i < len(e.Table.Columns); i++ {
+			data[e.Table.Columns[i].Name] = e.Rows[0][i]
+		}
+		return &msg.Msg{
+			RowsEvent: e,
+			Data:      data,
+		}
+	}
+	if e.Action == canal.UpdateAction {
+		for i := 0; i < len(e.Table.Columns); i++ {
+			old[e.Table.Columns[i].Name] = e.Rows[0][i]
+			data[e.Table.Columns[i].Name] = e.Rows[1][i]
+		}
+		return &msg.Msg{
+			RowsEvent: e,
+			Data:      data,
+			Old:       old,
+		}
+	}
+	if e.Action == canal.DeleteAction {
+		for i := 0; i < len(e.Table.Columns); i++ {
+			data[e.Table.Columns[i].Name] = e.Rows[0][i]
+		}
+		return &msg.Msg{
+			RowsEvent: e,
+			Data:      data,
+		}
+	}
+	return nil
+}
+
 func NewMysql(conf *config.MysqlSrConfig) *MyEventHandler {
 	m := &Mysql{conf.Mysql}
 	cfg := m.initCanalCfg()
@@ -211,6 +251,16 @@ func NewMysql(conf *config.MysqlSrConfig) *MyEventHandler {
 	h.position = pos
 	gs := h.getMysqlGtidSet()
 	h.syncChGTIDSet, h.ackGTIDSet = gs, gs
+
+	for _, f := range conf.Filter {
+		if f.Type == "delete-dml-column" {
+			deleteDmlColumnFilter, err := filter.NewDeleteDmlColumnFilter(f.Config)
+			if err != nil {
+				log.Fatal(err)
+			}
+			h.matcher = append(h.matcher, deleteDmlColumnFilter)
+		}
+	}
 
 	// 启动chanLoop
 	go h.chanLoop()
