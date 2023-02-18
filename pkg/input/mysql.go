@@ -185,11 +185,10 @@ func (h *MyEventHandler) Cancel() context.CancelFunc {
 }
 
 func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
-	data := make(map[string]interface{})
-	old := make(map[string]interface{})
 	var msgs []*msg.Msg
 	if e.Action == canal.InsertAction {
 		for _, row := range e.Rows {
+			data := make(map[string]interface{})
 			for j := 0; j < len(e.Table.Columns); j++ {
 				data[e.Table.Columns[j].Name] = row[j]
 			}
@@ -199,6 +198,7 @@ func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 				Action: e.Action,
 				Data:   data,
 			})
+			// log.Debugf("msg data:%v", data)
 
 		}
 		return msgs
@@ -208,9 +208,11 @@ func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 			if i%1 == 0 && i != 0 {
 				continue
 			}
+			data := make(map[string]interface{})
+			old := make(map[string]interface{})
 			for j := 0; j < len(e.Table.Columns); j++ {
-				old[e.Table.Columns[i].Name] = row[j]
-				data[e.Table.Columns[i].Name] = e.Rows[i+1][j]
+				old[e.Table.Columns[j].Name] = row[j]
+				data[e.Table.Columns[j].Name] = e.Rows[i+1][j]
 			}
 			log.Debugf("canal event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, row)
 			msgs = append(msgs, &msg.Msg{
@@ -219,11 +221,13 @@ func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 				Data:   data,
 				Old:    old,
 			})
+			// log.Debugf("msg data:%v", data)
 		}
 		return msgs
 	}
 	if e.Action == canal.DeleteAction {
 		for _, row := range e.Rows {
+			data := make(map[string]interface{})
 			for j := 0; j < len(e.Table.Columns); j++ {
 				data[e.Table.Columns[j].Name] = row[j]
 			}
@@ -233,6 +237,7 @@ func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 				Action: e.Action,
 				Data:   data,
 			})
+			// log.Debugf("msg data:%v", data)
 
 		}
 		return msgs
