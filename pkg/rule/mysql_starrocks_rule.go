@@ -18,7 +18,7 @@ func NewMysqlToSrRule(rules []*MysqlToSrRule) []string {
 	var includeTableRegex []string
 	for _, r := range rules {
 		// cfg.IncludeTableRegex[0] = "test\\..*"
-		includeTableRegex = append(includeTableRegex, r.SourceSchema+"\\."+r.SourceTable)
+		includeTableRegex = append(includeTableRegex, r.SourceSchema+"\\."+r.SourceTable+"$")
 	}
 	return includeTableRegex
 }
