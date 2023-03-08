@@ -205,14 +205,14 @@ func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 	}
 	if e.Action == canal.UpdateAction {
 		for i, row := range e.Rows {
-			if i%1 == 0 && i != 0 {
+			if i%2 == 0 {
 				continue
 			}
 			data := make(map[string]interface{})
 			old := make(map[string]interface{})
 			for j := 0; j < len(e.Table.Columns); j++ {
-				old[e.Table.Columns[j].Name] = row[j]
-				data[e.Table.Columns[j].Name] = e.Rows[i+1][j]
+				data[e.Table.Columns[j].Name] = row[j]
+				old[e.Table.Columns[j].Name] = e.Rows[i-1][j]
 			}
 			log.Debugf("canal event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, row)
 			msgs = append(msgs, &msg.Msg{

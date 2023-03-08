@@ -9,22 +9,17 @@ import (
 	"path/filepath"
 )
 
-type Filter struct {
-	Type   string                 `toml:"type"`
-	Config map[string]interface{} `toml:"config"`
-}
-
-type MysqlSrConfig struct {
+type MongoSrConfig struct {
 	Name       string
-	Mysql      *Mysql
+	Mongo      *Mongo
 	Starrocks  *Starrocks
 	Filter     []*Filter
-	Rules      []*rule.MysqlToSrRule `toml:"rule"`
+	Rules      []*rule.MongoToSrRule `toml:"rule"`
 	Logger     *log.Logger
 	ConfigFile string
 }
 
-func (config *MysqlSrConfig) ReadMysqlSrConf(filename string) (*MysqlSrConfig, error) {
+func (config *MongoSrConfig) ReadMongoSrConf(filename string) (*MongoSrConfig, error) {
 	var err error
 	if _, err = toml.DecodeFile(filename, &config); err != nil {
 		return nil, errors.Trace(err)
@@ -32,13 +27,13 @@ func (config *MysqlSrConfig) ReadMysqlSrConf(filename string) (*MysqlSrConfig, e
 	return config, err
 }
 
-func NewMysqlSrConfig(configFile *string) *MysqlSrConfig {
-	c := &MysqlSrConfig{}
+func NewMongoSrConfig(configFile *string) *MongoSrConfig {
+	c := &MongoSrConfig{}
 	fileName, err := filepath.Abs(*configFile)
 	if err != nil {
 		log.Fatal(err)
 	}
-	c, err = c.ReadMysqlSrConf(fileName)
+	c, err = c.ReadMongoSrConf(fileName)
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -29,7 +29,7 @@ func (sr *Starrocks) Execute(msgs []*msg.Msg, rule *rule.MysqlToSrRule, table *s
 	var jsonList []string
 
 	jsonList = sr.generateJSON(msgs)
-	log.Debugf("starrocks bulk custom row data num: %d", len(jsonList))
+	log.Debugf("starrocks bulk custom %s.%s row data num: %d", rule.TargetSchema, rule.TargetTable, len(jsonList))
 	return sr.sendData(jsonList, table, rule, msgs[0].IgnoreColumns)
 }
 

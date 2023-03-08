@@ -1,6 +1,7 @@
 *.idea
 bin/*
 configs/mysql-to-starrocks-local.toml
+configs/mongo-to-starrocks-local.toml
 .gtid_executed.toml
 build.sh
 error.log
