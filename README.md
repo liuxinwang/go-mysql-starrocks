@@ -25,6 +25,13 @@ port = 8040
 username = "root"
 password = ""
 
+[[filter]]
+type = "delete-dml-column" # 过滤列
+[filter.config]
+match-schema = "mysql_test"
+match-table = "tb1"
+columns = ["phone"]
+
 [[rule]] # 库表同步映射1
 source-schema = "mysql_test"
 source-table = "tb1"
@@ -56,6 +63,5 @@ target-table = "tb2"
 ```
 #### 5. 后台运行
 ```shell
-[sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log &
-[sr@ ~]$ exit
+[sr@ ~]$ (nohup ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log -level info &)
 ```

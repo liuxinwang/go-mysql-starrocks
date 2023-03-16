@@ -18,6 +18,9 @@ func (sr *Starrocks) MongoExecute(msgs []*msg.MongoMsg, rule *rule.MongoToSrRule
 	var jsonList []string
 	jsonList = sr.generateMongoJSON(msgs)
 	log.Debugf("starrocks bulk custom %s.%s row data num: %d", rule.TargetSchema, rule.TargetTable, len(jsonList))
+	for _, s := range jsonList {
+		log.Debugf("starrocks bulk custom %s.%s row data: %v", rule.TargetSchema, rule.TargetTable, s)
+	}
 	return sr.sendMongoData(jsonList, coll, rule)
 }
 
