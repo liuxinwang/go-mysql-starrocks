@@ -9,6 +9,7 @@ import (
 	"go-mysql-starrocks/pkg/config"
 	"go-mysql-starrocks/pkg/msg"
 	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -31,7 +32,11 @@ func findMongoFilePath(filePath string) {
 		return
 	}
 	f, err := os.OpenFile(filePath, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, 0600)
-	defer f.Close()
+	defer func() {
+		if err := f.Close(); err != nil {
+			log.Fatal(err)
+		}
+	}()
 	if err != nil {
 		log.Fatal(err)
 	} else {
@@ -77,11 +82,23 @@ func (pos *MongoPosition) MongoSave(resumeToken *msg.WatchId) error {
 	pos.lastSaveTime = n
 	var buf bytes.Buffer
 	e := toml.NewEncoder(&buf)
-	e.Encode(pos)
 	var err error
-	if err = ioutil2.WriteFileAtomic(pos.filePath, buf.Bytes(), 0644); err != nil {
-		log.Errorf("canal save position to file %s err %v", pos.filePath, err)
+	err = e.Encode(pos)
+	if err != nil {
+		log.Errorf("save change stream sync position to file %s err %v", pos.filePath, err)
 	}
-	log.Debugf("save canal sync position resumeToken: %s", pos.ResumeTokens)
+	if err = ioutil2.WriteFileAtomic(pos.filePath, buf.Bytes(), 0644); err != nil {
+		log.Errorf("save change stream sync position to file %s err %v", pos.filePath, err)
+	}
+	log.Infof("save change stream sync position resumeToken timestamp: %d", pos.resumeTokenTimestamp())
 	return errors.Trace(err)
+}
+
+func (pos *MongoPosition) resumeTokenTimestamp() uint64 {
+	i, err := strconv.ParseUint(pos.ResumeTokens.Data[2:18], 16, 64)
+	if err != nil {
+		log.Errorf("resumeToken parsing timestamp err %v", err)
+	}
+	return i >> 32
+
 }

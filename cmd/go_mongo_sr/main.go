@@ -34,6 +34,8 @@ func main() {
 	// 初始化mongo client
 	m := input.NewMongo(conf)
 
+	m.OutputType = *help.OutputType
+
 	defer func() {
 		if err := m.Client.Disconnect(context.TODO()); err != nil {
 			log.Fatal(err)

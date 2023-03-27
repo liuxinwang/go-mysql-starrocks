@@ -11,6 +11,7 @@ import (
 	"go-mysql-starrocks/pkg/output"
 	"go-mysql-starrocks/pkg/position"
 	"go-mysql-starrocks/pkg/rule"
+	"go.mongodb.org/mongo-driver/bson/primitive"
 	"go.mongodb.org/mongo-driver/mongo"
 	"go.mongodb.org/mongo-driver/mongo/options"
 	"reflect"
@@ -33,6 +34,9 @@ type Mongo struct {
 	matcher           filter.ChangeStreamFilterMatcher
 	collLock          sync.RWMutex
 	colls             map[string]*msg.Coll
+	startPosition     time.Time
+	OutputType        string
+	Config            *config.MongoSrConfig
 }
 
 type StreamObject struct {
@@ -42,6 +46,7 @@ type StreamObject struct {
 	Ns                msg.NS
 	UpdateDescription map[string]interface{}
 	DocumentKey       map[string]interface{}
+	ClusterTime       primitive.Timestamp
 }
 
 func (m *Mongo) Ctx() context.Context {
@@ -54,6 +59,7 @@ func (m *Mongo) Cancel() context.CancelFunc {
 
 func NewMongo(conf *config.MongoSrConfig) *Mongo {
 	m := &Mongo{}
+	m.Config = conf
 	m.Mongo = conf.Mongo
 	m.starrocks = &output.Starrocks{Starrocks: conf.Starrocks}
 	m.rulesMap = map[string]*rule.MongoToSrRule{}
@@ -85,6 +91,9 @@ func NewMongo(conf *config.MongoSrConfig) *Mongo {
 	m.position = pos
 
 	m.colls = make(map[string]*msg.Coll)
+
+	m.startPosition = conf.Input.StartPosition
+
 	// 启动chanLoop
 	go m.chanLoop()
 
@@ -93,16 +102,21 @@ func NewMongo(conf *config.MongoSrConfig) *Mongo {
 }
 
 func (m *Mongo) StartChangeStream() {
-	defer m.ChangeStream.Close(context.TODO())
+	defer func() {
+		if err := m.ChangeStream.Close(context.TODO()); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	opts := options.ChangeStream().SetFullDocument(options.UpdateLookup)
 
 	if m.position.ResumeTokens.Data != "" {
 		// 指定token启动change stream
 		opts.SetResumeAfter(m.position.ResumeTokens)
+	} else if !m.startPosition.IsZero() {
 		// 指定时间戳启动change stream
-		// t := &primitive.Timestamp{T: uint32(1679067547), I: 1}
-		// opts.SetStartAtOperationTime(t)
+		t := &primitive.Timestamp{T: uint32(m.startPosition.Unix()), I: 1}
+		opts.SetStartAtOperationTime(t)
 	}
 
 	log.Infof("start change stream")
@@ -114,6 +128,7 @@ func (m *Mongo) StartChangeStream() {
 		log.Fatal(err)
 	}
 	log.Infof("start change stream successfully")
+	log.Infof("iterate over the cursor to handle the change-stream events")
 
 	// iterate over the cursor to print the change-stream events
 	for changeStream.Next(context.TODO()) {
@@ -121,19 +136,27 @@ func (m *Mongo) StartChangeStream() {
 		if err := changeStream.Decode(&event); err != nil {
 			log.Fatal(err)
 		}
-		m.syncCh <- event.Id
+
 		// 默认过滤drop事件
 		if event.OperationType == "drop" {
+			m.syncCh <- event.Id
 			continue
 		}
 
-		// 转换document Field 从 camelCase 到 snakeCase
-		m.convertSnakeCase(&event)
+		if m.Config.Input.ConvertSnakeCase {
+			// 转换document Field 从 camelCase 到 snakeCase
+			m.convertSnakeCase(&event)
+		}
 
 		dataMsg := m.eventPreProcessing(&event)
 		if !m.matcher.IterateFilter(dataMsg) {
-			m.syncCh <- dataMsg
+			if m.OutputType == "output" {
+				log.Infof(dataMsg.String())
+			} else {
+				m.syncCh <- dataMsg
+			}
 		}
+		m.syncCh <- event.Id
 	}
 
 	if err := changeStream.Err(); err != nil {
@@ -142,7 +165,7 @@ func (m *Mongo) StartChangeStream() {
 }
 
 func (m *Mongo) convertSnakeCase(e *StreamObject) {
-	for v, _ := range e.FullDocument {
+	for v := range e.FullDocument {
 		snakeName := strcase.ToSnake(v)
 		if snakeName != v {
 			e.FullDocument[snakeName] = e.FullDocument[v]
@@ -154,11 +177,17 @@ func (m *Mongo) convertSnakeCase(e *StreamObject) {
 
 func (m *Mongo) eventPreProcessing(e *StreamObject) *msg.MongoMsg {
 	var dataMsg = &msg.MongoMsg{}
+	dataMsg.Ts = e.ClusterTime
 	dataMsg.ResumeToken = e.Id
 	dataMsg.OperationType = e.OperationType
 	dataMsg.Ns = e.Ns
-	dataMsg.Data = e.FullDocument
 	dataMsg.DocumentKey = e.DocumentKey
+	if e.OperationType == msg.MongoDeleteAction {
+		dataMsg.Data = e.DocumentKey
+	} else {
+		dataMsg.Data = e.FullDocument
+	}
+
 	return dataMsg
 }
 

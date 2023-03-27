@@ -7,16 +7,24 @@ import (
 	"go-mysql-starrocks/pkg/rule"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 type MongoSrConfig struct {
 	Name       string
+	Input      *Input
 	Mongo      *Mongo
 	Starrocks  *Starrocks
 	Filter     []*Filter
 	Rules      []*rule.MongoToSrRule `toml:"rule"`
 	Logger     *log.Logger
 	ConfigFile string
+	OutputType string
+}
+
+type Input struct {
+	StartPosition    time.Time `toml:"start-position"`
+	ConvertSnakeCase bool      `toml:"convert-snake-case"`
 }
 
 func (config *MongoSrConfig) ReadMongoSrConf(filename string) (*MongoSrConfig, error) {

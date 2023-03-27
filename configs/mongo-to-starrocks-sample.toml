@@ -1,0 +1,31 @@
+# name 必填，多实例运行时保证全局唯一
+name = "mongo2starrocks"
+
+[input]
+# 指定初次监听开始时间点，当_xxx-pos.info点位文件内容存在时，此选项不生效
+start-position = 2023-03-27T11:00:00 # Without double quotes, it means the local time zone
+# 转换document Field从camelCase到snakeCase，默认false；例如 userName（mongo） -> user_name（starrocks）
+convert-snake-case = false
+
+[mongo]
+uri = "192.168.0.1:3717,192.168.0.2:3717,192.168.0.3:3717/admin?replicaSet=mgset-xxxxx"
+username = "root"
+password = ""
+
+[starrocks]
+host = "127.0.0.1"
+port = 8040
+username = "root"
+password = ""
+
+[[rule]]
+source-schema = "mongo_test"
+source-table = "coll1"
+target-schema = "starrocks_test"
+target-table = "coll1"
+
+[[rule]]
+source-schema = "mongo_test"
+source-table = "coll2"
+target-schema = "starrocks_test"
+target-table = "coll2"

@@ -33,5 +33,9 @@ func HelpInit() *Help {
 		log.Infof("-config param does not exist")
 		os.Exit(0)
 	}
+	if *help.OutputType != "starrocks" && *help.OutputType != "output" {
+		log.Infof("-type param value is wrong, see help")
+		os.Exit(0)
+	}
 	return &help
 }

@@ -20,7 +20,7 @@ type RuleFilter struct {
 func (matcher ChangeStreamFilterMatcher) IterateFilter(msg *msg.MongoMsg) bool {
 	for _, filter := range matcher {
 		if filter.Filter(msg) {
-			log.Debugf("filter change stream event %v", msg.Data)
+			log.Debugf("filter change stream event %v", msg.String())
 			return true
 		}
 	}

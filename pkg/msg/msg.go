@@ -1,9 +1,12 @@
 package msg
 
 import (
+	"encoding/json"
+	"fmt"
 	"github.com/go-mysql-org/go-mysql/schema"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"reflect"
+	"time"
 )
 
 const (
@@ -43,6 +46,7 @@ type Msg struct {
 }
 
 type MongoMsg struct {
+	Ts            primitive.Timestamp
 	ResumeToken   *WatchId `bson:"_id"`
 	Ns            NS
 	OperationType string
@@ -126,4 +130,10 @@ func (c *Coll) AddColumn(name string, value interface{}) {
 		println(t)
 	}
 	c.Columns[index].RawType = reflect.TypeOf(value).String()
+}
+
+func (mm *MongoMsg) String() string {
+	b, _ := json.Marshal(mm.Data)
+	return fmt.Sprintf(`{"ts": "%d", "time": "%v", "ns": "%v", "type": "%v", "data": "%v"}`,
+		mm.Ts.T, time.Unix(int64(mm.Ts.T), 0).Format("2006-01-02 15:04:05"), mm.Ns.NsToString(), mm.OperationType, string(b))
 }
