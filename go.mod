@@ -6,6 +6,7 @@ require (
 	github.com/BurntSushi/toml v1.2.1
 	github.com/go-demo/version v0.0.0-20200109120206-2cde9473fd92
 	github.com/go-mysql-org/go-mysql v1.6.0
+	github.com/iancoleman/strcase v0.2.0
 	github.com/juju/errors v1.0.0
 	github.com/pingcap/errors v0.11.5-0.20201126102027-b0a155152ca3
 	github.com/siddontang/go v0.0.0-20180604090527-bdc77568d726

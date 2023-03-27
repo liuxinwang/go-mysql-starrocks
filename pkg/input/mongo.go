@@ -3,6 +3,7 @@ package input
 import (
 	"context"
 	"fmt"
+	"github.com/iancoleman/strcase"
 	"github.com/siddontang/go-log/log"
 	"go-mysql-starrocks/pkg/config"
 	"go-mysql-starrocks/pkg/filter"
@@ -66,6 +67,7 @@ func NewMongo(conf *config.MongoSrConfig) *Mongo {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Infof("init mongo client")
 
 	m.Client = client
 
@@ -79,6 +81,7 @@ func NewMongo(conf *config.MongoSrConfig) *Mongo {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Infof("load mongo check position")
 	m.position = pos
 
 	m.colls = make(map[string]*msg.Coll)
@@ -95,8 +98,14 @@ func (m *Mongo) StartChangeStream() {
 	opts := options.ChangeStream().SetFullDocument(options.UpdateLookup)
 
 	if m.position.ResumeTokens.Data != "" {
+		// 指定token启动change stream
 		opts.SetResumeAfter(m.position.ResumeTokens)
+		// 指定时间戳启动change stream
+		// t := &primitive.Timestamp{T: uint32(1679067547), I: 1}
+		// opts.SetStartAtOperationTime(t)
 	}
+
+	log.Infof("start change stream")
 
 	changeStream, err := m.Client.Watch(context.TODO(), mongo.Pipeline{}, opts)
 
@@ -104,6 +113,7 @@ func (m *Mongo) StartChangeStream() {
 	if err != nil {
 		log.Fatal(err)
 	}
+	log.Infof("start change stream successfully")
 
 	// iterate over the cursor to print the change-stream events
 	for changeStream.Next(context.TODO()) {
@@ -116,6 +126,10 @@ func (m *Mongo) StartChangeStream() {
 		if event.OperationType == "drop" {
 			continue
 		}
+
+		// 转换document Field 从 camelCase 到 snakeCase
+		m.convertSnakeCase(&event)
+
 		dataMsg := m.eventPreProcessing(&event)
 		if !m.matcher.IterateFilter(dataMsg) {
 			m.syncCh <- dataMsg
@@ -125,6 +139,17 @@ func (m *Mongo) StartChangeStream() {
 	if err := changeStream.Err(); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func (m *Mongo) convertSnakeCase(e *StreamObject) {
+	for v, _ := range e.FullDocument {
+		snakeName := strcase.ToSnake(v)
+		if snakeName != v {
+			e.FullDocument[snakeName] = e.FullDocument[v]
+			delete(e.FullDocument, v)
+		}
+	}
+
 }
 
 func (m *Mongo) eventPreProcessing(e *StreamObject) *msg.MongoMsg {
