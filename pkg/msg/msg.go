@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/go-mysql-org/go-mysql/schema"
+	"github.com/siddontang/go-log/log"
 	"go.mongodb.org/mongo-driver/bson/primitive"
 	"reflect"
 	"time"
@@ -126,8 +127,11 @@ func (c *Coll) AddColumn(name string, value interface{}) {
 		c.Columns[index].Type = MONGO_TYPE_LONG
 	case primitive.Decimal128:
 		c.Columns[index].Type = MONGO_TYPE_DECIMAL
+	case nil:
+		return
 	default:
-		println(t)
+		log.Warnf("column [%s] type could not be found, value type is %v", name, t)
+		return
 	}
 	c.Columns[index].RawType = reflect.TypeOf(value).String()
 }
