@@ -144,7 +144,7 @@ func (m *Mongo) StartChangeStream() {
 		}
 
 		if m.Config.Input.ConvertSnakeCase {
-			// 转换document Field 从 camelCase 到 snakeCase
+			// 转换document Field 从 camelCase 到 snake_case
 			m.convertSnakeCase(&event)
 		}
 
@@ -169,6 +169,11 @@ func (m *Mongo) convertSnakeCase(e *StreamObject) {
 		snakeName := strcase.ToSnake(v)
 		if snakeName != v {
 			e.FullDocument[snakeName] = e.FullDocument[v]
+			delete(e.FullDocument, v)
+		}
+
+		if v == "_id" {
+			e.FullDocument["id"] = e.FullDocument[v]
 			delete(e.FullDocument, v)
 		}
 	}
