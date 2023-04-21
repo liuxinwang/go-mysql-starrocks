@@ -35,7 +35,12 @@ func main() {
 	c := h.C()
 
 	// Start canal
-	go c.StartFromGTID(h.AckGTIDSet())
+	go func() {
+		err := c.StartFromGTID(h.AckGTIDSet())
+		if err != nil {
+			log.Fatal(err)
+		}
+	}()
 
 	select {
 	case <-c.Ctx().Done():

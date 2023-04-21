@@ -156,6 +156,9 @@ func (h *MyEventHandler) getMysqlGtidSet() mysql.GTIDSet {
 		if err != nil {
 			log.Fatal(err)
 		}
+		if gs.String() == "" {
+			log.Fatal("the gtid value is empty, please confirm whether to enable gtid!")
+		}
 		if err := h.position.Save(gs); err != nil {
 			log.Fatal(err)
 		}
