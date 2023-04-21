@@ -7,6 +7,11 @@
 
 
 ### 使用说明
+#### 环境准备
+```
+1. GO构建版本 v1.18.10
+2. MySQL 需要开启gtid
+```
 #### 1. 修改配置文件
 mysql-to-starrocks.toml
 ```toml
