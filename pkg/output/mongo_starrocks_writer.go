@@ -80,6 +80,7 @@ func (sr *Starrocks) sendMongoData(content []string, coll *msg.Coll, rule *rule.
 	// req.Header.Add
 	req.Header.Add("Authorization", "Basic "+sr.auth())
 	req.Header.Add("Expect", "100-continue")
+	req.Header.Add("strict_mode", "true")
 	// req.Header.Add("label", "39c25a5c-7000-496e-a98e-348a264c81de")
 	req.Header.Add("format", "json")
 	req.Header.Add("strip_outer_array", "true")
@@ -100,12 +101,14 @@ func (sr *Starrocks) sendMongoData(content []string, coll *msg.Coll, rule *rule.
 	}
 	returnMap, err := sr.parseResponse(response)
 	if returnMap["Status"] != "Success" {
-		msg := returnMap["Message"]
-		if strings.Contains(fmt.Sprintf("%v", msg), "unknown table") {
+		message := returnMap["Message"]
+		errorUrl := returnMap["ErrorURL"]
+		errorMsg := message.(string) + fmt.Sprintf(", visit ErrorURL to view error details, ErrorURL: %s", errorUrl)
+		if strings.Contains(fmt.Sprintf("%v", message), "unknown table") {
 			// 生成建表语句
 			sr.generateReferenceDDL(rule, coll)
 		}
-		return errors.Trace(errors.New(msg.(string)))
+		return errors.Trace(errors.New(errorMsg))
 	}
 	return nil
 }

@@ -84,6 +84,7 @@ func (sr *Starrocks) sendData(content []string, table *schema.Table, rule *rule.
 	// req.Header.Add
 	req.Header.Add("Authorization", "Basic "+sr.auth())
 	req.Header.Add("Expect", "100-continue")
+	req.Header.Add("strict_mode", "true")
 	// req.Header.Add("label", "39c25a5c-7000-496e-a98e-348a264c81de")
 	req.Header.Add("format", "json")
 	req.Header.Add("strip_outer_array", "true")
@@ -104,8 +105,10 @@ func (sr *Starrocks) sendData(content []string, table *schema.Table, rule *rule.
 	}
 	returnMap, err := sr.parseResponse(response)
 	if returnMap["Status"] != "Success" {
-		msg := returnMap["Message"]
-		return errors.Trace(errors.New(msg.(string)))
+		message := returnMap["Message"]
+		errorUrl := returnMap["ErrorURL"]
+		errorMsg := message.(string) + fmt.Sprintf(", visit ErrorURL to view error details, ErrorURL: %s", errorUrl)
+		return errors.Trace(errors.New(errorMsg))
 	}
 	return nil
 }
