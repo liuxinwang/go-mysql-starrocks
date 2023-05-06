@@ -1,6 +1,7 @@
 package rule
 
 import (
+	"fmt"
 	"github.com/siddontang/go-log/log"
 )
 
@@ -21,4 +22,8 @@ func NewMysqlToSrRule(rules []*MysqlToSrRule) []string {
 		includeTableRegex = append(includeTableRegex, r.SourceSchema+"\\."+r.SourceTable+"$")
 	}
 	return includeTableRegex
+}
+
+func (mts *MysqlToSrRule) TargetString() string {
+	return fmt.Sprintf("%s.%s", mts.TargetSchema, mts.TargetTable)
 }

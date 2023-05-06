@@ -107,7 +107,8 @@ func (sr *Starrocks) sendData(content []string, table *schema.Table, rule *rule.
 	if returnMap["Status"] != "Success" {
 		message := returnMap["Message"]
 		errorUrl := returnMap["ErrorURL"]
-		errorMsg := message.(string) + fmt.Sprintf(", visit ErrorURL to view error details, ErrorURL: %s", errorUrl)
+		errorMsg := message.(string) + fmt.Sprintf(", targetTable: %s", rule.TargetString()) +
+			fmt.Sprintf(", visit ErrorURL to view error details, ErrorURL: %s", errorUrl)
 		return errors.Trace(errors.New(errorMsg))
 	}
 	return nil

@@ -19,3 +19,8 @@ type Starrocks struct {
 	UserName string
 	Password string
 }
+
+type SyncParam struct {
+	ChannelSize      int `toml:"channel-size"`
+	FlushDelaySecond int `toml:"flush-delay-second"`
+}

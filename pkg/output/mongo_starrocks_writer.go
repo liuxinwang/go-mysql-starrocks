@@ -103,7 +103,8 @@ func (sr *Starrocks) sendMongoData(content []string, coll *msg.Coll, rule *rule.
 	if returnMap["Status"] != "Success" {
 		message := returnMap["Message"]
 		errorUrl := returnMap["ErrorURL"]
-		errorMsg := message.(string) + fmt.Sprintf(", visit ErrorURL to view error details, ErrorURL: %s", errorUrl)
+		errorMsg := message.(string) + fmt.Sprintf(", targetTable: %s", rule.TargetString()) +
+			fmt.Sprintf(", visit ErrorURL to view error details, ErrorURL: %s", errorUrl)
 		if strings.Contains(fmt.Sprintf("%v", message), "unknown table") {
 			// 生成建表语句
 			sr.generateReferenceDDL(rule, coll)

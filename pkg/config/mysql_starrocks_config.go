@@ -22,6 +22,7 @@ type MysqlSrConfig struct {
 	Rules      []*rule.MysqlToSrRule `toml:"rule"`
 	Logger     *log.Logger
 	ConfigFile string
+	SyncParam  *SyncParam `toml:"sync-param"`
 }
 
 func (config *MysqlSrConfig) ReadMysqlSrConf(filename string) (*MysqlSrConfig, error) {
@@ -45,6 +46,14 @@ func NewMysqlSrConfig(configFile *string) *MysqlSrConfig {
 	if c.Name == "" {
 		log.Infof("The configuration file \"name\" variable cannot be empty")
 		os.Exit(0)
+	}
+	if c.SyncParam.ChannelSize < 100 {
+		log.Warnf("The [sync-param] configuration parameter \"channel-size\" should not be less than 100, and reset configured channel-size = 100")
+		c.SyncParam.ChannelSize = 100
+	}
+	if c.SyncParam.FlushDelaySecond < 1 {
+		log.Warnf("The [sync-param] configuration parameter \"flush-delay-second\" should not be less than 1, and reset configured flush-delay-second = 1")
+		c.SyncParam.FlushDelaySecond = 1
 	}
 	c.ConfigFile = fileName
 	if err != nil {

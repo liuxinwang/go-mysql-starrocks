@@ -66,7 +66,7 @@ func NewMongo(conf *config.MongoSrConfig) *Mongo {
 	for _, r := range conf.Rules {
 		m.rulesMap[r.SourceSchema+"."+r.SourceTable] = r
 	}
-	m.syncCh = make(chan interface{}, 10240)
+	m.syncCh = make(chan interface{}, m.Config.SyncParam.ChannelSize)
 	uri := fmt.Sprintf("mongodb://%s:%s@%s", m.UserName, m.Password, m.Uri)
 	// 配置初始化
 	client, err := mongo.Connect(context.TODO(), options.Client().ApplyURI(uri))
@@ -197,7 +197,7 @@ func (m *Mongo) eventPreProcessing(e *StreamObject) *msg.MongoMsg {
 }
 
 func (m *Mongo) chanLoop() {
-	ticker := time.NewTicker(time.Second * 10)
+	ticker := time.NewTicker(time.Second * time.Duration(m.Config.SyncParam.FlushDelaySecond))
 	defer ticker.Stop()
 
 	eventsLen := 0

@@ -32,6 +32,7 @@ type MyEventHandler struct {
 	position      *position.Position
 	c             *canal.Canal
 	matcher       filter.BinlogFilterMatcher
+	syncParam     *config.SyncParam
 }
 
 func (m *Mysql) initCanalCfg() *canal.Config {
@@ -81,7 +82,7 @@ func (h *MyEventHandler) chanOutPut() {
 }
 
 func (h *MyEventHandler) chanLoop() {
-	ticker := time.NewTicker(time.Second * 10)
+	ticker := time.NewTicker(time.Second * time.Duration(h.syncParam.FlushDelaySecond))
 	defer ticker.Stop()
 
 	eventsLen := 0
@@ -262,13 +263,14 @@ func NewMysql(conf *config.MysqlSrConfig) *MyEventHandler {
 
 	// Register a handler to handle RowsEvent
 	h := &MyEventHandler{}
+	h.syncParam = conf.SyncParam
 	h.starrocks = &output.Starrocks{Starrocks: conf.Starrocks}
 	h.rulesMap = map[string]*rule.MysqlToSrRule{}
 	for _, r := range conf.Rules {
 		h.rulesMap[r.SourceSchema+":"+r.SourceTable] = r
 	}
 	h.c = c
-	h.syncCh = make(chan interface{}, 10240)
+	h.syncCh = make(chan interface{}, h.syncParam.ChannelSize)
 	h.ctx, h.cancel = context.WithCancel(context.Background())
 	c.SetEventHandler(h)
 
