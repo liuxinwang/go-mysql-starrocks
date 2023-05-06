@@ -30,6 +30,12 @@ port = 8040
 username = "root"
 password = ""
 
+[sync-param]
+# 同步chan队列最大值，达到会进行flush，最小100
+channel-size = 10240
+# 同步延迟秒数，达到会进行flush，最小1
+flush-delay-second = 10
+
 [[filter]]
 type = "delete-dml-column" # 过滤列
 [filter.config]
