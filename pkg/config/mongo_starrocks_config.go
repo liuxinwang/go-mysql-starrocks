@@ -50,6 +50,10 @@ func NewMongoSrConfig(configFile *string) *MongoSrConfig {
 		log.Infof("The configuration file \"name\" variable cannot be empty")
 		os.Exit(0)
 	}
+	if c.SyncParam == nil {
+		log.Infof("The configuration file \"[sync-param]\" variable cannot be empty")
+		os.Exit(0)
+	}
 	if c.SyncParam.ChannelSize < 100 {
 		log.Warnf("The [sync-param] configuration parameter \"channel-size\" should not be less than 100, and reset configured channel-size = 100")
 		c.SyncParam.ChannelSize = 100

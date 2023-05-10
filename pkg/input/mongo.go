@@ -178,6 +178,11 @@ func (m *Mongo) convertSnakeCase(e *StreamObject) {
 		}
 	}
 
+	if e.OperationType == msg.MongoDeleteAction {
+		e.DocumentKey["id"] = e.DocumentKey["_id"]
+		delete(e.DocumentKey, "_id")
+	}
+
 }
 
 func (m *Mongo) eventPreProcessing(e *StreamObject) *msg.MongoMsg {
