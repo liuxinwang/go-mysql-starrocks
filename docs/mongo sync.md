@@ -1,3 +1,14 @@
+## mongo 同步到 starrocks
+
+### 使用说明
+#### 环境准备
+```
+1. GO构建版本 v1.18.10
+2. mongo版本 4.2及以上；使用change stream监听方式，理论支持3.6及以上
+```
+#### 1. 新增配置文件
+mongo-to-starrocks.toml
+```toml
 # name 必填，多实例运行时保证全局唯一
 name = "mongo2starrocks"
 
@@ -36,3 +47,25 @@ source-schema = "mongo_test"
 source-table = "coll2"
 target-schema = "starrocks_test"
 target-table = "coll2"
+```
+#### 2. 启动
+```shell
+[sr@ ~]$ ./go-mongo-starrocks-linux-xxxxxx -config mongo-to-starrocks.toml
+```
+#### 3. 查看日志
+默认输出到控制台
+
+指定log-file参数运行
+```shell
+[sr@ ~]$ ./go-mongo-starrocks-linux-xxxxxx -config mongo-to-starrocks.toml -log-file mongo2starrocks.log
+[sr@ ~]$ tail -f mongo2starrocks.log
+```
+
+#### 4. 查看帮助
+```shell
+[sr@ ~]$ ./go-mongo-starrocks-linux-xxxxxx -h
+```
+#### 5. 后台运行
+```shell
+[sr@ ~]$ (nohup ./go-mongo-starrocks-linux-xxxxxx -config mongo-to-starrocks.toml -log-file mongo2starrocks.log -level info &)
+```

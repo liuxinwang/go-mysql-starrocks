@@ -76,3 +76,7 @@ target-table = "tb2"
 ```shell
 [sr@ ~]$ (nohup ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log -level info &)
 ```
+
+* * *
+- - -
+同时也支持mongo，详情参考[mongo sync配置](docs/mongo%20sync.md)
