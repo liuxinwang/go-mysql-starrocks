@@ -40,6 +40,7 @@ func (m *Mysql) initCanalCfg() *canal.Config {
 	cfg.Addr = fmt.Sprintf("%s:%d", m.Host, m.Port)
 	cfg.User = m.UserName
 	cfg.Password = m.Password
+	cfg.Dump.ExecutionPath = "" // ignore mysqldump, use binlog only
 	return cfg
 }
 
