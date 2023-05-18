@@ -44,7 +44,11 @@ func NewMysqlSrConfig(configFile *string) *MysqlSrConfig {
 		log.Fatal(err)
 	}
 	if c.Name == "" {
-		log.Infof("The configuration file \"name\" variable cannot be empty")
+		log.Errorf("The configuration file \"name\" variable cannot be empty")
+		os.Exit(0)
+	}
+	if c.SyncParam == nil {
+		log.Errorf("The configuration file \"[sync-param]\" variable cannot be empty")
 		os.Exit(0)
 	}
 	if c.SyncParam.ChannelSize < 100 {
