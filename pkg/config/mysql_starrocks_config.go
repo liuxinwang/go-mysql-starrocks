@@ -16,6 +16,7 @@ type Filter struct {
 
 type MysqlSrConfig struct {
 	Name       string
+	Input      *MysqlInput
 	Mysql      *Mysql
 	Starrocks  *Starrocks
 	Filter     []*Filter
@@ -23,6 +24,10 @@ type MysqlSrConfig struct {
 	Logger     *log.Logger
 	ConfigFile string
 	SyncParam  *SyncParam `toml:"sync-param"`
+}
+
+type MysqlInput struct {
+	StartPosition string `toml:"start-gtid"`
 }
 
 func (config *MysqlSrConfig) ReadMysqlSrConf(filename string) (*MysqlSrConfig, error) {

@@ -18,6 +18,10 @@ mysql-to-starrocks.toml
 # name 必填，多实例运行时需保证全局唯一
 name = "mysql2starrocks"
 
+[input]
+# 指定初次监听开始的gtid点位，当_xxx-pos.info点位文件内容存在时，此选项不生效
+# start-gtid = "3ba13781-44eb-2157-88a5-0dc879ec2221:1-123456"
+
 [mysql] # mysql连接信息
 host = "127.0.0.1"
 port = 3306

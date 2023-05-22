@@ -33,6 +33,7 @@ type MyEventHandler struct {
 	c             *canal.Canal
 	matcher       filter.BinlogFilterMatcher
 	syncParam     *config.SyncParam
+	StartPosition string
 }
 
 func (m *Mysql) initCanalCfg() *canal.Config {
@@ -151,8 +152,19 @@ func (h *MyEventHandler) chanLoop() {
 func (h *MyEventHandler) getMysqlGtidSet() mysql.GTIDSet {
 	var gs mysql.GTIDSet
 	var err error
-	if h.position.BinlogGTID == "" {
+	if h.position.BinlogGTID != "" {
+		gs, err = mysql.ParseGTIDSet("mysql", h.position.BinlogGTID)
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else if h.StartPosition != "" {
+		gs, err = mysql.ParseGTIDSet("mysql", h.StartPosition)
+		if err != nil {
+			log.Fatal(err)
+		}
+	} else {
 		log.Infof("%s param 'binlog-gtid' not exist", h.position.GetFilePath())
+		log.Infof("The configuration file [input] param 'start-gtid' not exist")
 		log.Infof("get the current gtid set value")
 		gs, err = h.c.GetMasterGTIDSet()
 		if err != nil {
@@ -162,11 +174,6 @@ func (h *MyEventHandler) getMysqlGtidSet() mysql.GTIDSet {
 			log.Fatal("the gtid value is empty, please confirm whether to enable gtid!")
 		}
 		if err := h.position.Save(gs); err != nil {
-			log.Fatal(err)
-		}
-	} else {
-		gs, err = mysql.ParseGTIDSet("mysql", h.position.BinlogGTID)
-		if err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -274,6 +281,8 @@ func NewMysql(conf *config.MysqlSrConfig) *MyEventHandler {
 	h.syncCh = make(chan interface{}, h.syncParam.ChannelSize)
 	h.ctx, h.cancel = context.WithCancel(context.Background())
 	c.SetEventHandler(h)
+
+	h.StartPosition = conf.Input.StartPosition
 
 	// 获取gtidSet
 	// 加载mysql position
