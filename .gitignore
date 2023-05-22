@@ -4,6 +4,7 @@ configs/mysql-to-starrocks-local.toml
 configs/mongo-to-starrocks-local.toml
 .gtid_executed.toml
 build.sh
+build_all.sh
 error.log
 release/*
 TODO.txt

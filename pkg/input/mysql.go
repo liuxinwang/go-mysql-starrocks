@@ -282,7 +282,9 @@ func NewMysql(conf *config.MysqlSrConfig) *MyEventHandler {
 	h.ctx, h.cancel = context.WithCancel(context.Background())
 	c.SetEventHandler(h)
 
-	h.StartPosition = conf.Input.StartPosition
+	if conf.Input != nil {
+		h.StartPosition = conf.Input.StartPosition
+	}
 
 	// 获取gtidSet
 	// 加载mysql position
