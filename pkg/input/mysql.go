@@ -304,6 +304,13 @@ func NewMysql(conf *config.MysqlSrConfig) *MyEventHandler {
 			}
 			h.matcher = append(h.matcher, deleteDmlColumnFilter)
 		}
+		if f.Type == "convert-dml-column" {
+			convertDmlColumnFilter, err := filter.NewConvertDmlColumnFilter(f.Config)
+			if err != nil {
+				log.Fatal(err)
+			}
+			h.matcher = append(h.matcher, convertDmlColumnFilter)
+		}
 	}
 
 	// 启动chanLoop

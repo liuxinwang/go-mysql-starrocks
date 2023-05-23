@@ -141,3 +141,9 @@ func (mm *MongoMsg) String() string {
 	return fmt.Sprintf(`{"ts": "%d", "time": "%v", "ns": "%v", "type": "%v", "data": "%v"}`,
 		mm.Ts.T, time.Unix(int64(mm.Ts.T), 0).Format("2006-01-02 15:04:05"), mm.Ns.NsToString(), mm.OperationType, string(b))
 }
+
+func (msg *Msg) String() string {
+	b, _ := json.Marshal(msg.Data)
+	return fmt.Sprintf(`{"table": "%v", "action": "%v", "data": "%v"}`,
+		msg.Table.String(), msg.Action, string(b))
+}

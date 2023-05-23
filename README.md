@@ -40,12 +40,20 @@ channel-size = 10240
 # 同步延迟秒数，达到会进行flush，最小1
 flush-delay-second = 10
 
-[[filter]]
-type = "delete-dml-column" # 过滤列
-[filter.config]
-match-schema = "mysql_test"
-match-table = "tb1"
-columns = ["phone"]
+#[[filter]]
+#type = "delete-dml-column" # 过滤列
+#[filter.config]
+#match-schema = "mysql_test"
+#match-table = "tb1"
+#columns = ["phone"]
+
+#[[filter]]
+#type = "convert-dml-column" # 转换dml行字段类型为json，column varchar（mysql） -> column json（starrocks）
+#[filter.config]
+#match-schema = "test"
+#match-table = "tb1"
+#columns = ["varchar_json_column", "varchar_arrayjson_column"]
+#cast-as = ["json", "arrayJson"] # json示例: {"id": 1, "name": 'zhangsan'}, arrayJson示例: [{"id": 1, "name": 'zhangsan'}, {"id": 1, "name": 'lisi'}]
 
 [[rule]] # 库表同步映射1
 source-schema = "mysql_test"
