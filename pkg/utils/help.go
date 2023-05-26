@@ -5,6 +5,7 @@ import (
 	"github.com/go-demo/version"
 	"github.com/siddontang/go-log/log"
 	"os"
+	"path/filepath"
 )
 
 type Help struct {
@@ -13,6 +14,7 @@ type Help struct {
 	LogLevel     *string
 	LogFile      *string
 	OutputType   *string
+	Daemon       *bool
 }
 
 func HelpInit() *Help {
@@ -21,6 +23,7 @@ func HelpInit() *Help {
 	help.LogLevel = flag.String("level", "info", "log level")
 	help.LogFile = flag.String("log-file", "", "log file path")
 	help.OutputType = flag.String("type", "starrocks", "output type: starrocks, output")
+	help.Daemon = flag.Bool("daemon", false, "daemon run, must include param 'log-file'")
 
 	flag.BoolVar(&help.printVersion, "version", false, "print program build version")
 	flag.Parse()
@@ -30,12 +33,24 @@ func HelpInit() *Help {
 		os.Exit(0)
 	}
 	if *help.ConfigFile == "" {
-		log.Infof("-config param does not exist")
+		log.Infof("-config param does not exist!")
 		os.Exit(0)
+	} else {
+		abs, err := filepath.Abs(*help.ConfigFile)
+		if err != nil {
+			log.Fatal("-config abs error: ", err.Error())
+		}
+		*help.ConfigFile = abs
 	}
 	if *help.OutputType != "starrocks" && *help.OutputType != "output" {
-		log.Infof("-type param value is wrong, see help")
+		log.Infof("-type param value is wrong, see help!")
 		os.Exit(0)
+	}
+	if *help.Daemon {
+		if *help.LogFile == "" {
+			log.Infof("daemon mode, must include -log-file param!")
+			os.Exit(0)
+		}
 	}
 	return &help
 }

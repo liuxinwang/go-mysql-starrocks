@@ -85,6 +85,13 @@ func (h *MyEventHandler) chanOutPut() {
 
 func (h *MyEventHandler) chanLoop() {
 	ticker := time.NewTicker(time.Second * time.Duration(h.syncParam.FlushDelaySecond))
+	//defer func() {
+	//	if e := recover(); e != nil {
+	//		debug.PrintStack()
+	//		log.Errorf("recover: ", e)
+	//		h.cancel()
+	//	}
+	//}()
 	defer ticker.Stop()
 
 	eventsLen := 0

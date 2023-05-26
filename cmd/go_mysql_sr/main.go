@@ -1,6 +1,7 @@
 package main
 
 import (
+	"github.com/sevlyar/go-daemon"
 	"github.com/siddontang/go-log/log"
 	"go-mysql-starrocks/pkg/config"
 	"go-mysql-starrocks/pkg/input"
@@ -13,6 +14,32 @@ import (
 func main() {
 	// 输入参数处理
 	help := utils.HelpInit()
+	// daemon模式启动
+	if *help.Daemon {
+		cntxt := &daemon.Context{
+			PidFileName: utils.GetExecPath() + "/go_mysql_sr.pid",
+			PidFilePerm: 0644,
+			LogFileName: utils.GetExecPath() + "/go_mysql_sr.log",
+			LogFilePerm: 0640,
+			WorkDir:     "./",
+			Umask:       027,
+		}
+		d, err := cntxt.Reborn()
+		if err != nil {
+			log.Fatal("Unable to run: ", err)
+		}
+
+		if d != nil {
+			return
+		}
+		defer func(cntxt *daemon.Context) {
+			err := cntxt.Release()
+			if err != nil {
+				log.Fatal("daemon release error: ", err)
+			}
+		}(cntxt)
+	}
+
 	// 日志初始化
 	l := utils.LogInit(help)
 
