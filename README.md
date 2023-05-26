@@ -86,7 +86,7 @@ target-table = "tb2"
 ```
 #### 5. 后台运行
 ```shell
-[sr@ ~]$ (nohup ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log -level info &)
+[sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log -level info -daemon
 ```
 
 * * *
