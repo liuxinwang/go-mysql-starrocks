@@ -105,12 +105,12 @@ func (h *MyEventHandler) chanLoop() {
 				schemaTable := data.Table.Schema + ":" + data.Table.Name
 				rowsData, ok := schemaTableEvents[schemaTable]
 				if !ok {
-					schemaTableEvents[schemaTable] = make([]*msg.Msg, 0, 10240)
+					schemaTableEvents[schemaTable] = make([]*msg.Msg, 0, h.syncParam.ChannelSize)
 				}
 				schemaTableEvents[schemaTable] = append(rowsData, data)
 				eventsLen += 1
 
-				if eventsLen >= 10240 {
+				if eventsLen >= h.syncParam.ChannelSize {
 					needFlush = true
 				}
 			case mysql.GTIDSet:
@@ -150,7 +150,7 @@ func (h *MyEventHandler) chanLoop() {
 			}
 			h.ackGTIDSet = h.syncChGTIDSet
 			eventsLen = 0
-			ticker.Reset(time.Second * 10)
+			ticker.Reset(time.Second * time.Duration(h.syncParam.FlushDelaySecond))
 		}
 
 	}

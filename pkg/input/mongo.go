@@ -216,13 +216,13 @@ func (m *Mongo) chanLoop() {
 				schemaTable := data.Ns.NsToString()
 				rowsData, ok := schemaTableEvents[schemaTable]
 				if !ok {
-					schemaTableEvents[schemaTable] = make([]*msg.MongoMsg, 0, 10240)
+					schemaTableEvents[schemaTable] = make([]*msg.MongoMsg, 0, m.Config.SyncParam.ChannelSize)
 				}
 				m.collsCacheHandle(data)
 				schemaTableEvents[schemaTable] = append(rowsData, data)
 				eventsLen += 1
 
-				if eventsLen >= 10240 {
+				if eventsLen >= m.Config.SyncParam.ChannelSize {
 					needFlush = true
 				}
 			case *msg.WatchId:
@@ -252,7 +252,7 @@ func (m *Mongo) chanLoop() {
 			}
 			m.ackResumeToken = m.syncChResumeToken
 			eventsLen = 0
-			ticker.Reset(time.Second * 10)
+			ticker.Reset(time.Second * time.Duration(m.Config.SyncParam.FlushDelaySecond))
 		}
 
 	}
