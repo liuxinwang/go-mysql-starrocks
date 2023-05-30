@@ -2,9 +2,9 @@ package filter
 
 import (
 	"fmt"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/utils"
 	"github.com/pingcap/errors"
-	"go-mysql-starrocks/pkg/msg"
-	"go-mysql-starrocks/pkg/utils"
 )
 
 type DeleteDmlColumnFilter struct {

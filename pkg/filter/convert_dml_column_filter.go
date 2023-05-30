@@ -3,10 +3,10 @@ package filter
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/utils"
 	"github.com/pingcap/errors"
 	"github.com/siddontang/go-log/log"
-	"go-mysql-starrocks/pkg/msg"
-	"go-mysql-starrocks/pkg/utils"
 )
 
 type ConvertDmlColumnFilter struct {

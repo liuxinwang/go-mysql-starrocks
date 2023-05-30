@@ -1,8 +1,8 @@
 package filter
 
 import (
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/siddontang/go-log/log"
-	"go-mysql-starrocks/pkg/msg"
 )
 
 type BinlogFilter interface {

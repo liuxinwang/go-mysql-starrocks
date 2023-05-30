@@ -1,4 +1,4 @@
-module go-mysql-starrocks
+module github.com/liuxinwang/go-mysql-starrocks
 
 go 1.18
 

@@ -3,8 +3,8 @@ package config
 import (
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
 	"github.com/siddontang/go-log/log"
-	"go-mysql-starrocks/pkg/rule"
 	"os"
 	"path/filepath"
 	"time"

@@ -2,8 +2,8 @@ package filter
 
 import (
 	"fmt"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/siddontang/go-log/log"
-	"go-mysql-starrocks/pkg/msg"
 	"regexp"
 )
 

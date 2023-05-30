@@ -4,9 +4,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"github.com/juju/errors"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
 	"github.com/siddontang/go-log/log"
-	"go-mysql-starrocks/pkg/msg"
-	"go-mysql-starrocks/pkg/rule"
 	"net/http"
 	"strings"
 )

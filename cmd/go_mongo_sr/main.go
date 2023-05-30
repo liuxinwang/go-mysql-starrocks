@@ -2,10 +2,10 @@ package main
 
 import (
 	"context"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/input"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/utils"
 	"github.com/siddontang/go-log/log"
-	"go-mysql-starrocks/pkg/config"
-	"go-mysql-starrocks/pkg/input"
-	"go-mysql-starrocks/pkg/utils"
 	"os"
 	"os/signal"
 	"syscall"
