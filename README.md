@@ -89,6 +89,8 @@ target-table = "tb2"
 [sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log -level info -daemon
 ```
 
+[使用docker部署](docs/docker%20run.md)
+
 * * *
 - - -
 同时也支持mongo，详情参考[mongo sync配置](docs/mongo%20sync.md)

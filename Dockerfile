@@ -1,21 +1,22 @@
-# syntax=docker/dockerfile:1
-FROM golang:1.18-alpine
+FROM golang:1.18-alpine as builder
+ENV TZ=Asia/Shanghai
+ENV LANG="en_US.UTF-8"
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
-RUN apk add --no-cache \
-    wget \
-    make \
-    git \
-    gcc \
-    musl-dev
 WORKDIR /app
-COPY go.mod go.sum ./
-ENV GOPROXY "https://goproxy.cn/"
+ENV GOPROXY "https://goproxy.cn,direct"
 ENV GO111MODULE "on"
-RUN go mod download
-COPY pkg ./
-COPY cmd/go_mysql_sr/main.go ./
-RUN ls -lh
+COPY . ./
+RUN go mod download && go mod verify
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /go-mysql-sr ./cmd/go_mysql_sr/main.go
 
-RUN CGO_ENABLED=0 GOOS=linux go build -o /go-mysql-sr
+FROM alpine
+ENV TZ=Asia/Shanghai
+ENV LANG="en_US.UTF-8"
+WORKDIR /app
+COPY --from=builder /go-mysql-sr ./go-mysql-sr
 
-CMD ["/go-mysql-sr -config=/etc/go-mysql-sr/starrocks.toml"]
+RUN set -x \
+  && apk add --no-cache tzdata bash \
+  && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
+
+CMD ["./go-mysql-sr", "-config", "/etc/go-mysql-sr/starrocks.toml"]
