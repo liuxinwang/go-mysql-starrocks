@@ -18,5 +18,5 @@
 ```
 #### 4. docker run start，替换${path}为本地配置文件绝对路径
 ```shell
-[sr@ ~]$ docker run -itd -name go-mysql-sr -v ${path}/go-mysql-starrocks/configs/go-mysql-sr/:/etc/go-mysql-sr/ go-mysql-sr
+[sr@ ~]$ docker run -itd --name go-mysql-sr -v ${path}/go-mysql-starrocks/configs/go-mysql-sr/:/etc/go-mysql-sr/ go-mysql-sr
 ```
