@@ -91,6 +91,12 @@ target-table = "tb2"
 
 [使用docker部署](docs/docker%20run.md)
 
+#### 监控
+集成prometheus，开放6166端口，当前支持 
+```shell
+curl localhost:6166/metrics
+```
+
 * * *
 - - -
 同时也支持mongo，详情参考[mongo sync配置](docs/mongo%20sync.md)
