@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"fmt"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/input"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/utils"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/siddontang/go-log/log"
+	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
@@ -39,6 +42,17 @@ func main() {
 	defer func() {
 		if err := m.Client.Disconnect(context.TODO()); err != nil {
 			log.Fatal(err)
+		}
+	}()
+
+	// Start prometheus http monitor
+	go func() {
+		log.Infof("starting http monitor on port 6166.")
+		http.Handle("/metrics", promhttp.Handler())
+		httpPortAddr := fmt.Sprintf(":%d", *help.HttpPort)
+		err := http.ListenAndServe(httpPortAddr, nil)
+		if err != nil {
+			log.Fatalf("starting http monitor error: %v", err)
 		}
 	}()
 

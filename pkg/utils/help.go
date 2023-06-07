@@ -15,6 +15,7 @@ type Help struct {
 	LogFile      *string
 	OutputType   *string
 	Daemon       *bool
+	HttpPort     *int
 }
 
 func HelpInit() *Help {
@@ -24,7 +25,7 @@ func HelpInit() *Help {
 	help.LogFile = flag.String("log-file", "", "log file path")
 	help.OutputType = flag.String("type", "starrocks", "output type: starrocks, output")
 	help.Daemon = flag.Bool("daemon", false, "daemon run, must include param 'log-file'")
-
+	help.HttpPort = flag.Int("http-port", 6166, "http monitor port, curl http://localhost:6166/metrics")
 	flag.BoolVar(&help.printVersion, "version", false, "print program build version")
 	flag.Parse()
 	// 这个需要放在第一个判断
