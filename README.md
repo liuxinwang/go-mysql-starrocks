@@ -88,14 +88,13 @@ target-table = "tb2"
 ```shell
 [sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log -level info -daemon
 ```
-
-[使用docker部署](docs/docker%20run.md)
-
-#### 监控
+#### 6. 监控
 集成prometheus，开放6166端口，当前支持 
 ```shell
 curl localhost:6166/metrics
 ```
+
+[使用docker部署](docs/docker%20run.md)
 
 * * *
 - - -
