@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/input"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/utils"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sevlyar/go-daemon"
@@ -12,6 +13,7 @@ import (
 	"os"
 	"os/signal"
 	"syscall"
+	"time"
 )
 
 func main() {
@@ -66,7 +68,8 @@ func main() {
 
 	// Start prometheus http monitor
 	go func() {
-		log.Infof("starting http monitor on port 6166.")
+		metrics.OpsStartTime.Set(float64(time.Now().Unix()))
+		log.Infof("starting http monitor on port %d.", *help.HttpPort)
 		http.Handle("/metrics", promhttp.Handler())
 		httpPortAddr := fmt.Sprintf(":%d", *help.HttpPort)
 		err := http.ListenAndServe(httpPortAddr, nil)

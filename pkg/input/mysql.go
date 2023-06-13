@@ -7,6 +7,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/filter"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/output"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/position"
@@ -22,18 +23,20 @@ type Mysql struct {
 
 type MyEventHandler struct {
 	canal.DummyEventHandler
-	syncCh        chan interface{}
-	syncChGTIDSet mysql.GTIDSet // sync chan中last gtid
-	ackGTIDSet    mysql.GTIDSet // sync data ack的 gtid
-	starrocks     *output.Starrocks
-	rulesMap      map[string]*rule.MysqlToSrRule
-	ctx           context.Context
-	cancel        context.CancelFunc
-	position      *position.Position
-	c             *canal.Canal
-	matcher       filter.BinlogFilterMatcher
-	syncParam     *config.SyncParam
-	StartPosition string
+	syncCh               chan interface{}
+	syncChGTIDSet        mysql.GTIDSet // sync chan中last gtid
+	syncChEventTimestamp uint32        // sync chan中last event timestamp
+	ackGTIDSet           mysql.GTIDSet // sync data ack的 gtid
+	ackEventTimestamp    uint32        // sync data ack的 event timestamp
+	starrocks            *output.Starrocks
+	rulesMap             map[string]*rule.MysqlToSrRule
+	ctx                  context.Context
+	cancel               context.CancelFunc
+	position             *position.Position
+	c                    *canal.Canal
+	matcher              filter.BinlogFilterMatcher
+	syncParam            *config.SyncParam
+	StartPosition        string
 }
 
 func (m *Mysql) initCanalCfg() *canal.Config {
@@ -56,6 +59,8 @@ func (h *MyEventHandler) OnRow(e *canal.RowsEvent) error {
 			h.syncCh <- m
 		}
 	}
+	// prom sync delay set
+	metrics.DelayReadTime.Set(float64(h.c.GetDelay()))
 	return nil
 }
 
@@ -102,6 +107,11 @@ func (h *MyEventHandler) chanLoop() {
 		case v := <-h.syncCh:
 			switch data := v.(type) {
 			case *msg.Msg:
+				// prom read event number counter
+				metrics.OpsReadProcessed.Inc()
+
+				h.syncChEventTimestamp = data.Timestamp
+
 				schemaTable := data.Table.Schema + ":" + data.Table.Name
 				rowsData, ok := schemaTableEvents[schemaTable]
 				if !ok {
@@ -149,6 +159,8 @@ func (h *MyEventHandler) chanLoop() {
 				return
 			}
 			h.ackGTIDSet = h.syncChGTIDSet
+			h.ackEventTimestamp = h.syncChEventTimestamp
+
 			eventsLen = 0
 			ticker.Reset(time.Second * time.Duration(h.syncParam.FlushDelaySecond))
 		}
@@ -213,9 +225,10 @@ func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 			}
 			log.Debugf("canal event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, row)
 			msgs = append(msgs, &msg.Msg{
-				Table:  e.Table,
-				Action: e.Action,
-				Data:   data,
+				Table:     e.Table,
+				Action:    e.Action,
+				Data:      data,
+				Timestamp: e.Header.Timestamp,
 			})
 			// log.Debugf("msg data:%v", data)
 
@@ -235,10 +248,11 @@ func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 			}
 			log.Debugf("canal event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, row)
 			msgs = append(msgs, &msg.Msg{
-				Table:  e.Table,
-				Action: e.Action,
-				Data:   data,
-				Old:    old,
+				Table:     e.Table,
+				Action:    e.Action,
+				Data:      data,
+				Old:       old,
+				Timestamp: e.Header.Timestamp,
 			})
 			// log.Debugf("msg data:%v", data)
 		}
@@ -252,9 +266,10 @@ func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 			}
 			log.Debugf("canal event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, row)
 			msgs = append(msgs, &msg.Msg{
-				Table:  e.Table,
-				Action: e.Action,
-				Data:   data,
+				Table:     e.Table,
+				Action:    e.Action,
+				Data:      data,
+				Timestamp: e.Header.Timestamp,
 			})
 			// log.Debugf("msg data:%v", data)
 
@@ -262,6 +277,27 @@ func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 		return msgs
 	}
 	return nil
+}
+
+func (h *MyEventHandler) promTimingMetrics() {
+	go func() {
+		var newDelay uint32
+		for {
+			// prom write delay set
+			now := uint32(time.Now().Unix())
+			if h.syncChEventTimestamp == 0 || h.ackEventTimestamp == 0 || h.syncChEventTimestamp == h.ackEventTimestamp {
+				newDelay = 0
+			} else {
+				if now >= h.ackEventTimestamp {
+					newDelay = now - h.ackEventTimestamp
+				}
+			}
+			log.Debugf("write delay %vs", newDelay)
+			metrics.DelayWriteTime.Set(float64(newDelay))
+
+			time.Sleep(3 * time.Second)
+		}
+	}()
 }
 
 func NewMysql(conf *config.MysqlSrConfig) *MyEventHandler {
@@ -322,6 +358,8 @@ func NewMysql(conf *config.MysqlSrConfig) *MyEventHandler {
 
 	// 启动chanLoop
 	go h.chanLoop()
+
+	h.promTimingMetrics()
 
 	return h
 

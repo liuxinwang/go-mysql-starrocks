@@ -89,13 +89,35 @@ target-table = "tb2"
 [sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log -level info -daemon
 ```
 #### 6. 监控
-集成prometheus，开放6166端口，当前支持 
+6.1 集成prometheus，开放6166端口，通过metrics暴露指标
 ```shell
-curl localhost:6166/metrics
+[sr@ ~]$ curl localhost:6166/metrics
+# 参数说明
+# 读取源端延迟（通过event data timestamp与当前时间差值计算获得）
+go_mysql_sr_read_delay_time_seconds 0
+# 读取源端消息数（累加）
+go_mysql_sr_read_processed_ops_total 6930
+# go-mysql-sr启动时间，用于计算运行时长
+go_mysql_sr_start_time 1.68664498e+09
+# 写入目的端延迟（根据写入的event data timestamp与当前时间差值计算获得，3s计算一次）
+go_mysql_sr_write_delay_time_seconds 1
+# 写入目的端消息数（累加）
+go_mysql_sr_write_processed_ops_total 6924
 ```
+6.2 prometheus配置参考
+```shell
+scrape_configs:
+  # 新增go-mysql-sr的job_name
+  - job_name: "go-mysql-sr"
+    static_configs:
+      - targets: ["host.docker.internal:6166", "host.docker.internal:6167"]
+```
+6.3 grafana dashboard 监控，json file [grafana-goMysqlSr-dashboard.json](configs/grafana-goMysqlSr-dashboard.json)
 
-[使用docker部署](docs/docker%20run.md)
+-----------
 
-* * *
-- - -
-同时也支持mongo，详情参考[mongo sync配置](docs/mongo%20sync.md)
+#### [使用docker部署go-mysql-sr](docs/docker%20run.md)
+
+-----------
+
+#### 同时也支持mongo，详情参考[mongo sync配置](docs/mongo%20sync.md)

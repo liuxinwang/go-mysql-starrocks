@@ -7,6 +7,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/canal"
 	"github.com/go-mysql-org/go-mysql/schema"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
 	"github.com/pingcap/errors"
@@ -111,6 +112,9 @@ func (sr *Starrocks) sendData(content []string, table *schema.Table, rule *rule.
 			fmt.Sprintf(", visit ErrorURL to view error details, ErrorURL: %s", errorUrl)
 		return errors.Trace(errors.New(errorMsg))
 	}
+	// prom write event number counter
+	numberLoadedRows := returnMap["NumberLoadedRows"]
+	metrics.OpsWriteProcessed.Add(numberLoadedRows.(float64))
 	return nil
 }
 

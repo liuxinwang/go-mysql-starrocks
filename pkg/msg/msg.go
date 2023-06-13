@@ -44,6 +44,7 @@ type Msg struct {
 	IgnoreColumns []string
 	Data          map[string]interface{}
 	Old           map[string]interface{}
+	Timestamp     uint32
 }
 
 type MongoMsg struct {
