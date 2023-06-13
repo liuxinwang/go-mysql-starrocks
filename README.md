@@ -112,7 +112,8 @@ scrape_configs:
     static_configs:
       - targets: ["host.docker.internal:6166", "host.docker.internal:6167"]
 ```
-6.3 grafana dashboard 监控，json file [grafana-goMysqlSr-dashboard.json](configs/grafana-goMysqlSr-dashboard.json)
+6.3 grafana dashboard 监控，json file下载 [grafana-goMysqlSr-dashboard.json](configs/grafana-goMysqlSr-dashboard.json)
+![](docs/img/grafana.png)
 
 -----------
 
