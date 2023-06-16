@@ -16,9 +16,12 @@ require (
 	go.mongodb.org/mongo-driver v1.11.6
 )
 
+replace github.com/go-mysql-org/go-mysql v1.6.0 => github.com/liuxinwang/go-mysql v1.6.3-enhancement
+
 require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/go-sql-driver/mysql v1.6.0 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
 	github.com/google/uuid v1.3.0 // indirect

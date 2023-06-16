@@ -67,14 +67,14 @@ source-table = "tb2"
 target-schema = "starrocks_test"
 target-table = "tb2"
 ```
+
 #### 2. 启动
 ```shell
 [sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml
 ```
-#### 3. 查看日志
-默认输出到控制台
 
-指定log-file参数运行
+#### 3. 查看日志
+默认输出到控制台，指定log-file参数运行
 ```shell
 [sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log
 [sr@ ~]$ tail -f mysql2starrocks.log
@@ -84,10 +84,12 @@ target-table = "tb2"
 ```shell
 [sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -h
 ```
+
 #### 5. 后台运行
 ```shell
 [sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log -level info -daemon
 ```
+
 #### 6. 监控
 6.1 集成prometheus，开放6166端口，通过metrics暴露指标
 ```shell
@@ -114,6 +116,52 @@ scrape_configs:
 ```
 6.3 grafana dashboard 监控，json file下载 [grafana-goMysqlSr-dashboard.json](configs/grafana-goMysqlSr-dashboard.json)
 ![](docs/img/grafana.png)
+
+#### 7. API
+7.1 新增同步表
+```shell
+curl localhost:6166/api/addRule -d '{"source-schema": "mysql_test","source-table": "tb3", "target-schema": "starrocks_test", "target-table": "tb3"}'
+```
+*result: add rule handle successfully.*
+
+
+7.2 删除同步表
+```shell
+curl localhost:6166/api/delRule -d '{"source-schema": "mysql_test","source-table": "tb3"}'
+```
+*result: delete rule handle successfully.*
+
+7.3 查询同步表
+```shell
+curl -s localhost:6166/api/getRule | python -m json.tool
+```
+*result:*
+```json
+{
+    "mysql_test:tb1": {
+        "source-schema": "mysql_test",
+        "source-table": "tb1",
+        "target-schema": "starrocks_test",
+        "target-table": "tb1",
+        "RuleType": "init"
+    },
+    "mysql_test:tb2": {
+        "source-schema": "mysql_test",
+        "source-table": "tb2",
+        "target-schema": "starrocks_test",
+        "target-table": "tb2",
+        "RuleType": "init"
+    },
+    "mysql_test:tb3": {
+        "source-schema": "mysql_test",
+        "source-table": "tb3",
+        "target-schema": "starrocks_test",
+        "target-table": "tb3",
+        "RuleType": "dynamic add"
+    }
+}
+```
+*注意：通过api修改不会持久化到配置文件。*
 
 -----------
 

@@ -6,10 +6,11 @@ import (
 )
 
 type MysqlToSrRule struct {
-	SourceSchema string `toml:"source-schema"`
-	SourceTable  string `toml:"source-table"`
-	TargetSchema string `toml:"target-schema"`
-	TargetTable  string `toml:"target-table"`
+	SourceSchema string `toml:"source-schema" json:"source-schema"`
+	SourceTable  string `toml:"source-table" json:"source-table"`
+	TargetSchema string `toml:"target-schema" json:"target-schema"`
+	TargetTable  string `toml:"target-table" json:"target-table"`
+	RuleType     string `default:"init"` // init、dynamic add
 }
 
 func NewMysqlToSrRule(rules []*MysqlToSrRule) []string {

@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/api"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/input"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
@@ -71,6 +72,9 @@ func main() {
 		metrics.OpsStartTime.Set(float64(time.Now().Unix()))
 		log.Infof("starting http monitor on port %d.", *help.HttpPort)
 		http.Handle("/metrics", promhttp.Handler())
+		http.HandleFunc("/api/addRule", api.AddRuleHandle(h))
+		http.HandleFunc("/api/delRule", api.DelRuleHandle(h))
+		http.HandleFunc("/api/getRule", api.GetRuleHandle(h))
 		httpPortAddr := fmt.Sprintf(":%d", *help.HttpPort)
 		err := http.ListenAndServe(httpPortAddr, nil)
 		if err != nil {

@@ -68,5 +68,8 @@ func NewMysqlSrConfig(configFile *string) *MysqlSrConfig {
 	if err != nil {
 		log.Fatal(err)
 	}
+	for _, r := range c.Rules {
+		r.RuleType = "init" // default 'init'
+	}
 	return c
 }

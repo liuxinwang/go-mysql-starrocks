@@ -211,6 +211,10 @@ func (h *MyEventHandler) C() *canal.Canal {
 	return h.c
 }
 
+func (h *MyEventHandler) RuleMap() map[string]*rule.MysqlToSrRule {
+	return h.rulesMap
+}
+
 func (h *MyEventHandler) Cancel() context.CancelFunc {
 	return h.cancel
 }
@@ -292,7 +296,7 @@ func (h *MyEventHandler) promTimingMetrics() {
 					newDelay = now - h.ackEventTimestamp
 				}
 			}
-			log.Debugf("write delay %vs", newDelay)
+			// log.Debugf("write delay %vs", newDelay)
 			metrics.DelayWriteTime.Set(float64(newDelay))
 
 			time.Sleep(3 * time.Second)
