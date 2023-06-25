@@ -9,25 +9,16 @@ import (
 	"path/filepath"
 )
 
-type Filter struct {
-	Type   string                 `toml:"type"`
-	Config map[string]interface{} `toml:"config"`
-}
-
 type MysqlSrConfig struct {
 	Name       string
-	Input      *MysqlInput
-	Mysql      *Mysql
-	Starrocks  *Starrocks
-	Filter     []*Filter
+	Input      *InputConfig
+	Mysql      *MysqlConfig
+	Starrocks  *StarrocksConfig
+	Filter     []*FilterConfig
 	Rules      []*rule.MysqlToSrRule `toml:"rule"`
 	Logger     *log.Logger
 	ConfigFile string
-	SyncParam  *SyncParam `toml:"sync-param"`
-}
-
-type MysqlInput struct {
-	StartPosition string `toml:"start-gtid"`
+	SyncParam  *SyncParamConfig `toml:"sync-param"`
 }
 
 func (config *MysqlSrConfig) ReadMysqlSrConf(filename string) (*MysqlSrConfig, error) {

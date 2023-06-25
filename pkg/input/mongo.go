@@ -20,7 +20,7 @@ import (
 )
 
 type Mongo struct {
-	*config.Mongo
+	*config.MongoConfig
 	syncCh            chan interface{}
 	syncChResumeToken *msg.WatchId `bson:"_id"` // sync chan中last ResumeToken
 	ackResumeToken    *msg.WatchId `bson:"_id"` // sync data ack的 ResumeToken
@@ -60,8 +60,8 @@ func (m *Mongo) Cancel() context.CancelFunc {
 func NewMongo(conf *config.MongoSrConfig) *Mongo {
 	m := &Mongo{}
 	m.Config = conf
-	m.Mongo = conf.Mongo
-	m.starrocks = &output.Starrocks{Starrocks: conf.Starrocks}
+	m.MongoConfig = conf.Mongo
+	m.starrocks = &output.Starrocks{StarrocksConfig: conf.Starrocks}
 	m.rulesMap = map[string]*rule.MongoToSrRule{}
 	for _, r := range conf.Rules {
 		m.rulesMap[r.SourceSchema+"."+r.SourceTable] = r

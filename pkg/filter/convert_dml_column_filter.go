@@ -16,75 +16,73 @@ type ConvertDmlColumnFilter struct {
 	castAs      []string
 }
 
-func NewConvertDmlColumnFilter(config map[string]interface{}) (*ConvertDmlColumnFilter, error) {
+func (cdcf *ConvertDmlColumnFilter) NewFilter(config map[string]interface{}) error {
 	columns, ok := config["columns"]
 	if !ok {
-		return nil, errors.Trace(errors.New("'columns' is not configured"))
+		return errors.Trace(errors.New("'columns' is not configured"))
 	}
 	castAs, ok := config["cast-as"]
 	if !ok {
-		return nil, errors.Trace(errors.New("'cast-as' is not configured"))
+		return errors.Trace(errors.New("'cast-as' is not configured"))
 	}
 
 	c, ok := utils.CastToSlice(columns)
 	if !ok {
-		return nil, errors.Trace(errors.New("'columns' should be an array"))
+		return errors.Trace(errors.New("'columns' should be an array"))
 	}
 
 	columnsString, err := utils.CastSliceInterfaceToSliceString(c)
 	if err != nil {
-		return nil, errors.Trace(errors.New("'columns' should be an array of string"))
+		return errors.Trace(errors.New("'columns' should be an array of string"))
 	}
 
 	ca, ok := utils.CastToSlice(castAs)
 	if !ok {
-		return nil, errors.Trace(errors.New("'cast-as' should be an array"))
+		return errors.Trace(errors.New("'cast-as' should be an array"))
 	}
 
 	castAsString, err := utils.CastSliceInterfaceToSliceString(ca)
 	if err != nil {
-		return nil, errors.Trace(errors.New("'cast-as' should be an array of string"))
+		return errors.Trace(errors.New("'cast-as' should be an array of string"))
 	}
 
 	if len(c) != len(ca) {
-		return nil, errors.Trace(errors.New("'columns' should have the same length of 'cast-as'"))
+		return errors.Trace(errors.New("'columns' should have the same length of 'cast-as'"))
 	}
 
-	return &ConvertDmlColumnFilter{
-		matchSchema: fmt.Sprintf("%v", config["match-schema"]),
-		matchTable:  fmt.Sprintf("%v", config["match-table"]),
-		columns:     columnsString,
-		castAs:      castAsString,
-	}, nil
+	cdcf.matchSchema = fmt.Sprintf("%v", config["match-schema"])
+	cdcf.matchTable = fmt.Sprintf("%v", config["match-table"])
+	cdcf.columns = columnsString
+	cdcf.castAs = castAsString
+	return nil
 }
 
-func (filter *ConvertDmlColumnFilter) Filter(msg *msg.Msg) bool {
-	if filter.matchSchema == msg.Table.Schema && filter.matchTable == msg.Table.Name {
-		for i, column := range filter.columns {
-			colIndex := msg.Table.FindColumn(column)
-			if colIndex > -1 {
-				columnValue := msg.Data[column]
-				if columnValue == "" || columnValue == nil {
+func (cdcf *ConvertDmlColumnFilter) Filter(msg *msg.Msg) bool {
+	if cdcf.matchSchema == msg.Database && cdcf.matchTable == msg.Table {
+		for i, column := range cdcf.columns {
+			value := FindColumn(msg.DmlMsg.Data, column)
+			if value != nil {
+				if value == "" {
 					continue
 				}
 
-				switch filter.castAs[i] {
+				switch cdcf.castAs[i] {
 				case "json":
 					var columnJson map[string]interface{}
-					err := json.Unmarshal([]byte(fmt.Sprintf("%v", columnValue)), &columnJson)
+					err := json.Unmarshal([]byte(fmt.Sprintf("%v", value)), &columnJson)
 					if err != nil {
 						log.Warnf("convert-dml-column filter error: %v, column '%s' value: '%v' cast as json error, row event: %v",
-							err.Error(), column, columnValue, msg.String())
+							err.Error(), column, value, msg.DmlMsg.Data)
 					}
-					msg.Data[column] = columnJson
+					msg.DmlMsg.Data[column] = columnJson
 				case "arrayJson":
 					var columnArrayJson []map[string]interface{}
-					err := json.Unmarshal([]byte(fmt.Sprintf("%v", columnValue)), &columnArrayJson)
+					err := json.Unmarshal([]byte(fmt.Sprintf("%v", value)), &columnArrayJson)
 					if err != nil {
 						log.Warnf("convert-dml-column filter error: %v, column '%s' value: '%v' cast as json error, row event: %v",
-							err.Error(), column, columnValue, msg.String())
+							err.Error(), column, value, msg.DmlMsg.Data)
 					}
-					msg.Data[column] = columnArrayJson
+					msg.DmlMsg.Data[column] = columnArrayJson
 				}
 			}
 		}

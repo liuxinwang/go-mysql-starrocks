@@ -18,7 +18,7 @@ import (
 )
 
 type Mysql struct {
-	*config.Mysql
+	*config.MysqlConfig
 }
 
 type MyEventHandler struct {
@@ -32,10 +32,10 @@ type MyEventHandler struct {
 	rulesMap             map[string]*rule.MysqlToSrRule
 	ctx                  context.Context
 	cancel               context.CancelFunc
-	position             *position.Position
+	position             *position.MyPosition
 	c                    *canal.Canal
 	matcher              filter.BinlogFilterMatcher
-	syncParam            *config.SyncParam
+	syncParam            *config.SyncParamConfig
 	StartPosition        string
 }
 
@@ -100,13 +100,13 @@ func (h *MyEventHandler) chanLoop() {
 	defer ticker.Stop()
 
 	eventsLen := 0
-	schemaTableEvents := make(map[string][]*msg.Msg)
+	schemaTableEvents := make(map[string][]*msg.MysqlMsg)
 	for {
 		needFlush := false
 		select {
 		case v := <-h.syncCh:
 			switch data := v.(type) {
-			case *msg.Msg:
+			case *msg.MysqlMsg:
 				// prom read event number counter
 				metrics.OpsReadProcessed.Inc()
 
@@ -115,7 +115,7 @@ func (h *MyEventHandler) chanLoop() {
 				schemaTable := data.Table.Schema + ":" + data.Table.Name
 				rowsData, ok := schemaTableEvents[schemaTable]
 				if !ok {
-					schemaTableEvents[schemaTable] = make([]*msg.Msg, 0, h.syncParam.ChannelSize)
+					schemaTableEvents[schemaTable] = make([]*msg.MysqlMsg, 0, h.syncParam.ChannelSize)
 				}
 				schemaTableEvents[schemaTable] = append(rowsData, data)
 				eventsLen += 1
@@ -219,8 +219,8 @@ func (h *MyEventHandler) Cancel() context.CancelFunc {
 	return h.cancel
 }
 
-func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
-	var msgs []*msg.Msg
+func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.MysqlMsg {
+	var msgs []*msg.MysqlMsg
 	if e.Action == canal.InsertAction {
 		for _, row := range e.Rows {
 			data := make(map[string]interface{})
@@ -228,7 +228,7 @@ func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 				data[e.Table.Columns[j].Name] = row[j]
 			}
 			log.Debugf("canal event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, row)
-			msgs = append(msgs, &msg.Msg{
+			msgs = append(msgs, &msg.MysqlMsg{
 				Table:     e.Table,
 				Action:    e.Action,
 				Data:      data,
@@ -251,7 +251,7 @@ func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 				old[e.Table.Columns[j].Name] = e.Rows[i-1][j]
 			}
 			log.Debugf("canal event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, row)
-			msgs = append(msgs, &msg.Msg{
+			msgs = append(msgs, &msg.MysqlMsg{
 				Table:     e.Table,
 				Action:    e.Action,
 				Data:      data,
@@ -269,7 +269,7 @@ func (h *MyEventHandler) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 				data[e.Table.Columns[j].Name] = row[j]
 			}
 			log.Debugf("canal event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, row)
-			msgs = append(msgs, &msg.Msg{
+			msgs = append(msgs, &msg.MysqlMsg{
 				Table:     e.Table,
 				Action:    e.Action,
 				Data:      data,
@@ -319,7 +319,7 @@ func NewMysql(conf *config.MysqlSrConfig) *MyEventHandler {
 	// Register a handler to handle RowsEvent
 	h := &MyEventHandler{}
 	h.syncParam = conf.SyncParam
-	h.starrocks = &output.Starrocks{Starrocks: conf.Starrocks}
+	h.starrocks = &output.Starrocks{StarrocksConfig: conf.Starrocks}
 	h.rulesMap = map[string]*rule.MysqlToSrRule{}
 	for _, r := range conf.Rules {
 		h.rulesMap[r.SourceSchema+":"+r.SourceTable] = r
@@ -343,22 +343,23 @@ func NewMysql(conf *config.MysqlSrConfig) *MyEventHandler {
 	gs := h.getMysqlGtidSet()
 	h.syncChGTIDSet, h.ackGTIDSet = gs, gs
 
-	for _, f := range conf.Filter {
-		if f.Type == "delete-dml-column" {
-			deleteDmlColumnFilter, err := filter.NewDeleteDmlColumnFilter(f.Config)
-			if err != nil {
-				log.Fatal(err)
+	/*
+		for _, f := range conf.Filter {
+			if f.Type == "delete-dml-column" {
+				deleteDmlColumnFilter, err := filter.NewDeleteDmlColumnFilter(f.Config)
+				if err != nil {
+					log.Fatal(err)
+				}
+				h.matcher = append(h.matcher, deleteDmlColumnFilter)
 			}
-			h.matcher = append(h.matcher, deleteDmlColumnFilter)
-		}
-		if f.Type == "convert-dml-column" {
-			convertDmlColumnFilter, err := filter.NewConvertDmlColumnFilter(f.Config)
-			if err != nil {
-				log.Fatal(err)
+			if f.Type == "convert-dml-column" {
+				convertDmlColumnFilter, err := filter.NewConvertDmlColumnFilter(f.Config)
+				if err != nil {
+					log.Fatal(err)
+				}
+				h.matcher = append(h.matcher, convertDmlColumnFilter)
 			}
-			h.matcher = append(h.matcher, convertDmlColumnFilter)
-		}
-	}
+		} */
 
 	// 启动chanLoop
 	go h.chanLoop()

@@ -18,12 +18,12 @@ import (
 )
 
 type Starrocks struct {
-	*config.Starrocks
+	*config.StarrocksConfig
 }
 
 var tmpColumn = "_sl_optype"
 
-func (sr *Starrocks) Execute(msgs []*msg.Msg, rule *rule.MysqlToSrRule, table *schema.Table) error {
+func (sr *Starrocks) Execute(msgs []*msg.MysqlMsg, rule *rule.MysqlToSrRule, table *schema.Table) error {
 	if len(msgs) == 0 {
 		return nil
 	}
@@ -37,7 +37,7 @@ func (sr *Starrocks) Execute(msgs []*msg.Msg, rule *rule.MysqlToSrRule, table *s
 	return sr.sendData(jsonList, table, rule, msgs[0].IgnoreColumns)
 }
 
-func (sr *Starrocks) generateJSON(msgs []*msg.Msg) []string {
+func (sr *Starrocks) generateJSON(msgs []*msg.MysqlMsg) []string {
 	var jsonList []string
 
 	for _, event := range msgs {

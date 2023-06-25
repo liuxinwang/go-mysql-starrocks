@@ -15,7 +15,7 @@ import (
 	"time"
 )
 
-type Position struct {
+type MyPosition struct {
 	sync.RWMutex
 	BinlogName   string `toml:"binlog-name"`
 	BinlogPos    string `toml:"binlog-pos"`
@@ -24,7 +24,7 @@ type Position struct {
 	lastSaveTime time.Time
 }
 
-func (pos *Position) GetFilePath() string {
+func (pos *MyPosition) GetFilePath() string {
 	return pos.filePath
 }
 
@@ -53,8 +53,8 @@ func getPositionFilePath(conf *config.MysqlSrConfig) string {
 	return positionFileName
 }
 
-func LoadPosition(conf *config.MysqlSrConfig) (*Position, error) {
-	var pos Position
+func LoadPosition(conf *config.MysqlSrConfig) (*MyPosition, error) {
+	var pos MyPosition
 	var err error
 	positionFilePath := getPositionFilePath(conf)
 	findFilePath(positionFilePath)
@@ -65,7 +65,7 @@ func LoadPosition(conf *config.MysqlSrConfig) (*Position, error) {
 	return &pos, err
 }
 
-func (pos *Position) Save(gtid mysql.GTIDSet) error {
+func (pos *MyPosition) Save(gtid mysql.GTIDSet) error {
 	pos.Lock()
 	defer pos.Unlock()
 

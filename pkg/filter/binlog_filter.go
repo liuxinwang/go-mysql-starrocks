@@ -6,12 +6,12 @@ import (
 )
 
 type BinlogFilter interface {
-	Filter(msg *msg.Msg) bool
+	Filter(msg *msg.MysqlMsg) bool
 }
 
 type BinlogFilterMatcher []BinlogFilter
 
-func (matcher BinlogFilterMatcher) IterateFilter(msg *msg.Msg) bool {
+func (matcher BinlogFilterMatcher) IterateFilter(msg *msg.MysqlMsg) bool {
 	for _, filter := range matcher {
 		if filter.Filter(msg) {
 			log.Debugf("filter binlog event %v", msg.Data)

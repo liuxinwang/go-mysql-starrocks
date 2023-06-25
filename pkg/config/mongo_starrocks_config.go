@@ -13,14 +13,14 @@ import (
 type MongoSrConfig struct {
 	Name       string
 	Input      *Input
-	Mongo      *Mongo
-	Starrocks  *Starrocks
-	Filter     []*Filter
+	Mongo      *MongoConfig
+	Starrocks  *StarrocksConfig
+	Filter     []*FilterConfig
 	Rules      []*rule.MongoToSrRule `toml:"rule"`
 	Logger     *log.Logger
 	ConfigFile string
 	OutputType string
-	SyncParam  *SyncParam `toml:"sync-param"`
+	SyncParam  *SyncParamConfig `toml:"sync-param"`
 }
 
 type Input struct {

@@ -22,7 +22,7 @@ type MongoPosition struct {
 	lastSaveTime time.Time
 }
 
-func (pos *Position) GetMongoFilePath() string {
+func (pos *MyPosition) GetMongoFilePath() string {
 	return pos.filePath
 }
 
