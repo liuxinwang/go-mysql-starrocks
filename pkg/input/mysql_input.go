@@ -1,6 +1,7 @@
 package input
 
 import (
+	"context"
 	"fmt"
 	"github.com/go-mysql-org/go-mysql/canal"
 	"github.com/go-mysql-org/go-mysql/mysql"
@@ -12,6 +13,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/position"
 	"github.com/mitchellh/mapstructure"
 	"github.com/siddontang/go-log/log"
+	"sync"
 	"time"
 )
 
@@ -22,6 +24,9 @@ type MysqlInputPlugin struct {
 	syncChan    *channel.SyncChannel
 	canal       *canal.Canal
 	position    position.Position
+	wg          sync.WaitGroup
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
 type inputContext struct {
@@ -36,6 +41,7 @@ func (mi *MysqlInputPlugin) NewInput(inputConfig interface{}, ruleRegex []string
 	if err != nil {
 		log.Fatal("input config parsing failed. err: ", err.Error())
 	}
+	mi.ctx, mi.cancel = context.WithCancel(context.Background())
 	// 初始化canal配置
 	cfg := canal.NewDefaultConfig()
 	cfg.Addr = fmt.Sprintf("%s:%d", mi.MysqlConfig.Host, mi.MysqlConfig.Port)
@@ -95,12 +101,22 @@ func (mi *MysqlInputPlugin) StartInput(pos position.Position, syncChan *channel.
 		}
 	}()
 
+	// Start metrics
+	mi.StartMetrics()
+
 	return mysqlPos
+}
+
+func (mi *MysqlInputPlugin) StartMetrics() {
+	mi.promTimingMetrics()
 }
 
 func (mi *MysqlInputPlugin) Close() {
 	mi.canal.Close()
 	log.Infof("close mysql input canal.")
+	mi.cancel()
+	mi.wg.Wait()
+	log.Infof("close mysql input metrics.")
 }
 
 func (mi *MysqlInputPlugin) OnRow(e *canal.RowsEvent) error {
@@ -108,8 +124,6 @@ func (mi *MysqlInputPlugin) OnRow(e *canal.RowsEvent) error {
 	for _, m := range msgs {
 		mi.syncChan.SyncChan <- m
 	}
-	// prom sync delay set
-	metrics.DelayReadTime.Set(float64(mi.canal.GetDelay()))
 	return nil
 }
 
@@ -196,4 +210,23 @@ func (mi *MysqlInputPlugin) AfterMsgCommit(msg *msg.Msg) error {
 	}
 
 	return nil
+}
+
+func (mi *MysqlInputPlugin) promTimingMetrics() {
+	mi.wg.Add(1)
+	go func() {
+		defer mi.wg.Done()
+		ticker := time.NewTicker(time.Second * 3)
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				// prom sync delay set
+				metrics.DelayReadTime.Set(float64(mi.canal.GetDelay()))
+			case <-mi.ctx.Done():
+				return
+			}
+		}
+	}()
 }

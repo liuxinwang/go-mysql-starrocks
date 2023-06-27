@@ -25,14 +25,16 @@ import (
 
 type Doris struct {
 	*config.DorisConfig
-	tableLock  sync.RWMutex
-	tables     map[string]*Table
-	wg         sync.WaitGroup
-	ctx        context.Context
-	cancel     context.CancelFunc
-	rulesMap   map[string]*rule.DorisRule
-	lastCtlMsg *msg.Msg
-	close      bool
+	tableLock     sync.RWMutex
+	tables        map[string]*Table
+	wg            sync.WaitGroup
+	ctx           context.Context
+	cancel        context.CancelFunc
+	rulesMap      map[string]*rule.DorisRule
+	lastCtlMsg    *msg.Msg
+	close         bool
+	syncTimestamp time.Time // sync chan中last event timestamp
+	ackTimestamp  time.Time // sync data ack的 event timestamp
 }
 
 var DeleteColumn = "_delete_sign_"
@@ -51,6 +53,7 @@ func (ds *Doris) NewOutput(outputConfig interface{}) {
 		log.Fatal("output config parsing failed. err: ", err.Error())
 	}
 	ds.close = false
+	ds.StartMetrics()
 }
 
 func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[string]interface{}) {
@@ -79,6 +82,7 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 
 				// prom read event number counter
 				metrics.OpsReadProcessed.Inc()
+				ds.syncTimestamp = data.Timestamp
 
 				schemaTable := data.Database + ":" + data.Table
 				rowsData, ok := schemaTableEvents[schemaTable]
@@ -141,6 +145,7 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 				log.Fatalf("not found AfterCommitCallback func")
 			}
 
+			ds.ackTimestamp = ds.syncTimestamp
 			eventsLen = 0
 			// ticker.Reset(time.Second * time.Duration(outputChan.FLushCHanMaxWaitSecond))
 			if ds.close {
@@ -170,6 +175,7 @@ func (ds *Doris) Close() {
 	ds.cancel()
 	ds.wg.Wait()
 	log.Infof("close doris output goroutine.")
+	log.Infof("close doris output metrics goroutine.")
 }
 
 func (ds *Doris) GetTable(db string, table string) (*Table, error) {
@@ -316,4 +322,34 @@ func (ds *Doris) parseResponse(response *http.Response) (map[string]interface{},
 	}
 
 	return result, err
+}
+
+func (ds *Doris) StartMetrics() {
+	ds.promTimingMetrics()
+}
+
+func (ds *Doris) promTimingMetrics() {
+	ds.wg.Add(1)
+	go func() {
+		defer ds.wg.Done()
+		ticker := time.NewTicker(time.Second * 3)
+		defer ticker.Stop()
+		var newDelaySeconds uint32
+		for {
+			select {
+			case <-ticker.C:
+				// prom write delay set
+				now := time.Now()
+				if ds.syncTimestamp.IsZero() || ds.ackTimestamp.IsZero() || ds.syncTimestamp == ds.ackTimestamp {
+					newDelaySeconds = 0
+				} else {
+					newDelaySeconds = uint32(now.Sub(ds.ackTimestamp).Seconds())
+				}
+				// log.Debugf("write delay %vs", newDelay)
+				metrics.DelayWriteTime.Set(float64(newDelaySeconds))
+			case <-ds.ctx.Done():
+				return
+			}
+		}
+	}()
 }
