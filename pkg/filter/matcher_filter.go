@@ -42,17 +42,23 @@ func (matcher MatcherFilter) IterateFilter(msg *msg.Msg) bool {
 
 func (matcher MatcherFilter) StartFilter(syncChan *channel.SyncChannel, outputChan *channel.OutputChannel) {
 	// 消费syncChan
-	for {
-		select {
-		case v := <-syncChan.SyncChan:
-			switch data := v.(type) {
-			case *msg.Msg:
-				// 过滤syncChan
-				if !matcher.IterateFilter(data) {
-					// 写入outputChan
-					outputChan.SyncChan <- data
+	go func() {
+		for {
+			select {
+			case v := <-syncChan.SyncChan:
+				switch data := v.(type) {
+				case *msg.Msg:
+					// 过滤syncChan
+					if !matcher.IterateFilter(data) {
+						// 写入outputChan
+						outputChan.SyncChan <- data
+					}
 				}
+			case <-syncChan.Done:
+				log.Infof("close syncChan filter goroutine.")
+				log.Infof("close input sync chan.")
+				return
 			}
 		}
-	}
+	}()
 }

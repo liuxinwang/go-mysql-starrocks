@@ -24,12 +24,16 @@ import (
 func main() {
 	// 输入参数处理
 	help := utils.HelpInit()
+	// 日志初始化
+	// _ = utils.LogInit(help)
+	// 目前使用daemon的 log
+	log.SetLevelByName(*help.LogLevel)
 	// daemon模式启动
 	if *help.Daemon {
 		cntxt := &daemon.Context{
 			PidFileName: utils.GetExecPath() + "/go_mysql_sr.pid",
 			PidFilePerm: 0644,
-			LogFileName: utils.GetExecPath() + "/go_mysql_sr.log",
+			LogFileName: *help.LogFile,
 			LogFilePerm: 0640,
 			WorkDir:     "./",
 			Umask:       027,
@@ -49,9 +53,6 @@ func main() {
 			}
 		}(cntxt)
 	}
-
-	// 日志初始化
-	_ = utils.LogInit(help)
 
 	// 进程信号处理
 	sc := make(chan os.Signal, 1)
@@ -131,12 +132,21 @@ func main() {
 	// 启动position
 	pos.StartPosition()
 	// 启动filter
-	go matcherFilter.StartFilter(syncChan, outputChan)
+	matcherFilter.StartFilter(syncChan, outputChan)
 	// 启动output插件
 	go oo.StartOutput(outputChan, rr.GetRuleToMap())
 
 	select {
 	case n := <-sc:
 		log.Infof("receive signal %v, closing", n)
+		// 关闭input插件
+		ii.Close()
+		// 关闭filter
+		syncChan.Close()
+		// 关闭output插件
+		oo.Close()
+		// flush last position
+		pos.Close()
+		log.Infof("[Main] is stopped.")
 	}
 }

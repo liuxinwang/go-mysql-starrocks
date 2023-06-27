@@ -25,12 +25,14 @@ import (
 
 type Doris struct {
 	*config.DorisConfig
-	tableLock sync.RWMutex
-	tables    map[string]*Table
-	ctx       context.Context
-	cancel    context.CancelFunc
-	rulesMap  map[string]*rule.DorisRule
-	lastMsg   *msg.Msg
+	tableLock  sync.RWMutex
+	tables     map[string]*Table
+	wg         sync.WaitGroup
+	ctx        context.Context
+	cancel     context.CancelFunc
+	rulesMap   map[string]*rule.DorisRule
+	lastCtlMsg *msg.Msg
+	close      bool
 }
 
 var DeleteColumn = "_delete_sign_"
@@ -41,11 +43,14 @@ func (ds *Doris) NewOutput(outputConfig interface{}) {
 	ds.tables = make(map[string]*Table)
 	ds.rulesMap = make(map[string]*rule.DorisRule)
 
+	ds.ctx, ds.cancel = context.WithCancel(context.Background())
+
 	ds.DorisConfig = &config.DorisConfig{}
 	err := mapstructure.Decode(outputConfig, ds.DorisConfig)
 	if err != nil {
 		log.Fatal("output config parsing failed. err: ", err.Error())
 	}
+	ds.close = false
 }
 
 func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[string]interface{}) {
@@ -53,8 +58,11 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 		log.Fatal(err)
 	}
 
+	ds.wg.Add(1)
+
 	ticker := time.NewTicker(time.Second * time.Duration(outputChan.FLushCHanMaxWaitSecond))
 	defer ticker.Stop()
+	defer ds.wg.Done()
 
 	eventsLen := 0
 	schemaTableEvents := make(map[string][]*msg.Msg)
@@ -65,7 +73,7 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 			switch data := v.(type) {
 			case *msg.Msg:
 				if data.Type == msg.MsgCtl {
-					ds.lastMsg = data
+					ds.lastCtlMsg = data
 					continue
 				}
 
@@ -84,6 +92,10 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 					needFlush = true
 				}
 			}
+		case <-ds.ctx.Done():
+			needFlush = true
+			log.Infof("wait last one flush output data...")
+			ds.close = true
 		case <-ticker.C:
 			needFlush = true
 		}
@@ -109,12 +121,19 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 				}
 				delete(schemaTableEvents, schemaTable)
 			}
-			//TODO save ack position
-			if ds.lastMsg == nil {
-				continue
+
+			// only start lastCtlMsg is nil
+			if ds.lastCtlMsg == nil {
+				if ds.close {
+					log.Infof("not found lastCtlMsg and output data, not last one flush.")
+					return
+				} else {
+					continue
+				}
 			}
-			if ds.lastMsg.AfterCommitCallback != nil {
-				err := ds.lastMsg.AfterCommitCallback(ds.lastMsg)
+
+			if ds.lastCtlMsg.AfterCommitCallback != nil {
+				err := ds.lastCtlMsg.AfterCommitCallback(ds.lastCtlMsg)
 				if err != nil {
 					log.Fatalf("ack msg failed: %v", errors.ErrorStack(err))
 				}
@@ -124,6 +143,10 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 
 			eventsLen = 0
 			// ticker.Reset(time.Second * time.Duration(outputChan.FLushCHanMaxWaitSecond))
+			if ds.close {
+				log.Infof("last one flush output data done.")
+				return
+			}
 		}
 	}
 }
@@ -141,6 +164,12 @@ func (ds *Doris) Execute(msgs []*msg.Msg, table *Table) error {
 	}
 	//TODO ignoreColumns handle
 	return ds.sendData(jsonList, table, nil)
+}
+
+func (ds *Doris) Close() {
+	ds.cancel()
+	ds.wg.Wait()
+	log.Infof("close doris output goroutine.")
 }
 
 func (ds *Doris) GetTable(db string, table string) (*Table, error) {

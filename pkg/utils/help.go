@@ -22,7 +22,7 @@ func HelpInit() *Help {
 	var help Help
 	help.ConfigFile = flag.String("config", "", "go-mysql-starrocks config file")
 	help.LogLevel = flag.String("level", "info", "log level")
-	help.LogFile = flag.String("log-file", "", "log file path")
+	help.LogFile = flag.String("log-file", "go_mysql_sr.log", "log file path")
 	help.OutputType = flag.String("type", "starrocks", "output type: starrocks, output")
 	help.Daemon = flag.Bool("daemon", false, "daemon run, must include param 'log-file'")
 	help.HttpPort = flag.Int("http-port", 6166, "http monitor port, curl http://localhost:6166/metrics")

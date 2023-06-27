@@ -98,6 +98,11 @@ func (mi *MysqlInputPlugin) StartInput(pos position.Position, syncChan *channel.
 	return mysqlPos
 }
 
+func (mi *MysqlInputPlugin) Close() {
+	mi.canal.Close()
+	log.Infof("close mysql input canal.")
+}
+
 func (mi *MysqlInputPlugin) OnRow(e *canal.RowsEvent) error {
 	msgs := mi.eventPreProcessing(e)
 	for _, m := range msgs {

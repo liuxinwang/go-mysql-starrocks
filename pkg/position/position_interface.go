@@ -12,6 +12,7 @@ type Position interface {
 	SavePosition() error
 	ModifyPosition(v string) error
 	StartPosition()
+	Close()
 }
 
 func GetPositionFilePath(conf *config.BaseConfig) string {

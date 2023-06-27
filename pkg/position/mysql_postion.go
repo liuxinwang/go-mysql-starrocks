@@ -2,6 +2,7 @@ package position
 
 import (
 	"bytes"
+	"context"
 	"github.com/BurntSushi/toml"
 	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
@@ -19,10 +20,13 @@ type MysqlPosition struct {
 	FilePath     string
 	lastSaveTime time.Time
 	wg           sync.WaitGroup
+	ctx          context.Context
+	cancel       context.CancelFunc
 }
 
 func (pos *MysqlPosition) LoadPosition(config *config.BaseConfig) {
 	var err error
+	pos.ctx, pos.cancel = context.WithCancel(context.Background())
 	// load pos.info file position
 	positionFilePath := GetPositionFilePath(config)
 	FindPositionFileNotCreate(positionFilePath)
@@ -90,7 +94,19 @@ func (pos *MysqlPosition) StartPosition() {
 				if err := pos.SavePosition(); err != nil {
 					log.Fatalf("position save failed: %v", errors.ErrorStack(err))
 				}
+			case <-pos.ctx.Done():
+				if err := pos.SavePosition(); err != nil {
+					log.Fatalf("last position save failed: %v", errors.ErrorStack(err))
+				}
+				log.Infof("last position save successfully. position: %v", pos.BinlogGTID)
+				return
 			}
 		}
 	}()
+}
+
+func (pos *MysqlPosition) Close() {
+	pos.cancel()
+	pos.wg.Wait()
+	log.Infof("close mysql save position ticker goroutine.")
 }
