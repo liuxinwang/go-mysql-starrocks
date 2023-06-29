@@ -22,6 +22,7 @@ type Msg struct {
 	Type                MsgType
 	DmlMsg              *DMLMsg
 	DdlMsg              *DDLMsg
+	ResumeToken         *WatchId `bson:"_id"`
 	Timestamp           time.Time
 	InputContext        interface{}
 	AfterCommitCallback MsgCallbackFunc
@@ -34,6 +35,10 @@ type DMLMsg struct {
 }
 
 type DDLMsg struct {
+}
+
+type WatchId struct {
+	Data string `bson:"_data"`
 }
 
 type MsgCallbackFunc func(m *Msg) error

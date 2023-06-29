@@ -3,6 +3,7 @@ package filter
 import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/channel"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/siddontang/go-log/log"
 )
@@ -12,19 +13,33 @@ type MatcherFilter []Filter
 func NewMatcherFilter(filterConfigs []*config.FilterConfig) MatcherFilter {
 	var matcher MatcherFilter
 	for _, fc := range filterConfigs {
-		if fc.Type == "delete-dml-column" {
+		switch typ := fc.Type; typ {
+		case DeleteDMLColumnFilterName:
 			ddcf := &DeleteDmlColumnFilter{}
 			if err := ddcf.NewFilter(fc.Config); err != nil {
 				log.Fatal(err)
 			}
 			matcher = append(matcher, ddcf)
-		}
-		if fc.Type == "convert-dml-column" {
+		case ConvertDmlColumnFilterName:
 			cdcf := &ConvertDmlColumnFilter{}
 			if err := cdcf.NewFilter(fc.Config); err != nil {
 				log.Fatal(err)
 			}
 			matcher = append(matcher, cdcf)
+		case ConvertSnakeCaseColumnFilterName:
+			cscf := &ConvertSnakeCaseColumnFilter{}
+			if err := cscf.NewFilter(fc.Config); err != nil {
+				log.Fatal(err)
+			}
+			matcher = append(matcher, cscf)
+		case RenameDmlColumnFilterName:
+			rdcf := &RenameDmlColumnFilter{}
+			if err := rdcf.NewFilter(fc.Config); err != nil {
+				log.Fatal(err)
+			}
+			matcher = append(matcher, rdcf)
+		default:
+			log.Warnf("filter: %s unhandled will not take effect.", typ)
 		}
 	}
 	return matcher
@@ -52,6 +67,11 @@ func (matcher MatcherFilter) StartFilter(syncChan *channel.SyncChannel, outputCh
 					if !matcher.IterateFilter(data) {
 						// 写入outputChan
 						outputChan.SyncChan <- data
+
+						if data.Type == msg.MsgDML {
+							// prom read event number counter
+							metrics.OpsReadProcessed.Inc()
+						}
 					}
 				}
 			case <-syncChan.Done:

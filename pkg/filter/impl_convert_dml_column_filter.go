@@ -9,7 +9,10 @@ import (
 	"github.com/siddontang/go-log/log"
 )
 
+const ConvertDmlColumnFilterName = "convert-dml-column"
+
 type ConvertDmlColumnFilter struct {
+	name        string
 	matchSchema string
 	matchTable  string
 	columns     []string
@@ -50,6 +53,7 @@ func (cdcf *ConvertDmlColumnFilter) NewFilter(config map[string]interface{}) err
 		return errors.Trace(errors.New("'columns' should have the same length of 'cast-as'"))
 	}
 
+	cdcf.name = ConvertDmlColumnFilterName
 	cdcf.matchSchema = fmt.Sprintf("%v", config["match-schema"])
 	cdcf.matchTable = fmt.Sprintf("%v", config["match-table"])
 	cdcf.columns = columnsString
@@ -71,16 +75,16 @@ func (cdcf *ConvertDmlColumnFilter) Filter(msg *msg.Msg) bool {
 					var columnJson map[string]interface{}
 					err := json.Unmarshal([]byte(fmt.Sprintf("%v", value)), &columnJson)
 					if err != nil {
-						log.Warnf("convert-dml-column filter error: %v, column '%s' value: '%v' cast as json error, row event: %v",
-							err.Error(), column, value, msg.DmlMsg.Data)
+						log.Warnf("%s filter error: %v, column '%s' value: '%v' cast as json error, row event: %v",
+							cdcf.name, err.Error(), column, value, msg.DmlMsg.Data)
 					}
 					msg.DmlMsg.Data[column] = columnJson
 				case "arrayJson":
 					var columnArrayJson []map[string]interface{}
 					err := json.Unmarshal([]byte(fmt.Sprintf("%v", value)), &columnArrayJson)
 					if err != nil {
-						log.Warnf("convert-dml-column filter error: %v, column '%s' value: '%v' cast as json error, row event: %v",
-							err.Error(), column, value, msg.DmlMsg.Data)
+						log.Warnf("%s filter error: %v, column '%s' value: '%v' cast as json error, row event: %v",
+							cdcf.name, err.Error(), column, value, msg.DmlMsg.Data)
 					}
 					msg.DmlMsg.Data[column] = columnArrayJson
 				}

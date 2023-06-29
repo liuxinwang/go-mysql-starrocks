@@ -12,11 +12,14 @@ import (
 	"time"
 )
 
+type mysqlBasePosition struct {
+	BinlogName string `toml:"binlog-name"`
+	BinlogPos  uint32 `toml:"binlog-pos"`
+	BinlogGTID string `toml:"binlog-gtid"`
+}
 type MysqlPosition struct {
 	sync.RWMutex
-	BinlogName   string `toml:"binlog-name"`
-	BinlogPos    uint32 `toml:"binlog-pos"`
-	BinlogGTID   string `toml:"binlog-gtid"`
+	*mysqlBasePosition
 	FilePath     string
 	lastSaveTime time.Time
 	wg           sync.WaitGroup
@@ -29,7 +32,8 @@ func (pos *MysqlPosition) LoadPosition(config *config.BaseConfig) {
 	pos.ctx, pos.cancel = context.WithCancel(context.Background())
 	// load pos.info file position
 	positionFilePath := GetPositionFilePath(config)
-	FindPositionFileNotCreate(positionFilePath)
+	initPositionData := "binlog-name = \"\"\nbinlog-pos = 0\nbinlog-gtid = \"\""
+	FindPositionFileNotCreate(positionFilePath, initPositionData)
 	if _, err = toml.DecodeFile(positionFilePath, &pos); err != nil {
 		log.Fatal(err)
 	}

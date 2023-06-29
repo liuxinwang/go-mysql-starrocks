@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
-	"github.com/go-mysql-org/go-mysql/canal"
 	"github.com/go-mysql-org/go-mysql/client"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/juju/errors"
@@ -37,7 +36,6 @@ type Doris struct {
 	ackTimestamp  time.Time // sync data ack的 event timestamp
 }
 
-var DeleteColumn = "_delete_sign_"
 var DeleteCondition = fmt.Sprintf("%s=1", DeleteColumn)
 
 func (ds *Doris) NewOutput(outputConfig interface{}) {
@@ -80,8 +78,6 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 					continue
 				}
 
-				// prom read event number counter
-				metrics.OpsReadProcessed.Inc()
 				ds.syncTimestamp = data.Timestamp
 
 				schemaTable := data.Database + ":" + data.Table
@@ -119,7 +115,7 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 
 				err = ds.Execute(schemaTableEvents[schemaTable], tableObj)
 				if err != nil {
-					log.Errorf("do doris bulk err %v, close sync", err)
+					log.Fatalf("do doris bulk err %v, close sync", err)
 					ds.cancel()
 					return
 				}
@@ -223,17 +219,17 @@ func (ds *Doris) generateJSON(msgs []*msg.Msg) []string {
 
 	for _, event := range msgs {
 		switch event.DmlMsg.Action {
-		case canal.InsertAction:
+		case msg.InsertAction:
 			// 增加虚拟列，标识操作类型 (stream load opType：UPSERT 0，DELETE：1)
 			event.DmlMsg.Data[DeleteColumn] = 0
 			b, _ := json.Marshal(event.DmlMsg.Data)
 			jsonList = append(jsonList, string(b))
-		case canal.UpdateAction:
+		case msg.UpdateAction:
 			// 增加虚拟列，标识操作类型 (stream load opType：UPSERT 0，DELETE：1)
 			event.DmlMsg.Data[DeleteColumn] = 0
 			b, _ := json.Marshal(event.DmlMsg.Data)
 			jsonList = append(jsonList, string(b))
-		case canal.DeleteAction: // starrocks2.4版本只支持primary key模型load delete
+		case msg.DeleteAction: // starrocks2.4版本只支持primary key模型load delete
 			// 增加虚拟列，标识操作类型 (stream load opType：UPSERT 0，DELETE：1)
 			event.DmlMsg.Data[DeleteColumn] = 1
 			b, _ := json.Marshal(event.DmlMsg.Data)

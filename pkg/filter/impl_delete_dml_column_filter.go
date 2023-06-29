@@ -46,10 +46,3 @@ func (ddcf *DeleteDmlColumnFilter) Filter(msg *msg.Msg) bool {
 	}
 	return false
 }
-
-func FindColumn(data map[string]interface{}, name string) interface{} {
-	if value, ok := data[name]; ok {
-		return value
-	}
-	return nil
-}

@@ -1,11 +1,11 @@
 package config
 
-type InputConfigInter interface {
+type InputSourceConfig interface {
 	NewInputSourceConfig(config map[string]interface{})
 	GetInputSourceConfig() interface{}
 }
 
-type OutputConfigInter interface {
+type OutputTargetConfig interface {
 	NewOutputTargetConfig(config map[string]interface{})
 	GetOutputTargetConfig() interface{}
 }

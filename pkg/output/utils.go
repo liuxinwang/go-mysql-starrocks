@@ -1,5 +1,7 @@
 package output
 
+var DeleteColumn = "_delete_sign_"
+
 type Table struct {
 	Schema  string
 	Name    string
@@ -8,8 +10,4 @@ type Table struct {
 
 type TableColumn struct {
 	Name string
-}
-
-func (t *Table) GetTable(db string, table string) {
-
 }

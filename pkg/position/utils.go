@@ -7,14 +7,6 @@ import (
 	"strings"
 )
 
-type Position interface {
-	LoadPosition(config *config.BaseConfig)
-	SavePosition() error
-	ModifyPosition(v string) error
-	StartPosition()
-	Close()
-}
-
 func GetPositionFilePath(conf *config.BaseConfig) string {
 	splits := strings.SplitAfter(*conf.FileName, "/")
 	lastIndex := len(splits) - 1
@@ -23,7 +15,7 @@ func GetPositionFilePath(conf *config.BaseConfig) string {
 	return positionFileName
 }
 
-func FindPositionFileNotCreate(filePath string) {
+func FindPositionFileNotCreate(filePath string, initPositionData string) {
 	if _, err := os.Stat(filePath); err == nil {
 		return
 	}
@@ -39,7 +31,7 @@ func FindPositionFileNotCreate(filePath string) {
 	if err != nil {
 		log.Fatal(err)
 	} else {
-		_, err = f.Write([]byte("binlog-name = \"\"\nbinlog-pos = 0\nbinlog-gtid = \"\""))
+		_, err = f.Write([]byte(initPositionData))
 		if err != nil {
 			log.Fatal(err)
 		}

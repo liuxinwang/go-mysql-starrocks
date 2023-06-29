@@ -5,7 +5,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/position"
 )
 
-type PluginInput interface {
+type Plugin interface {
 	NewInput(config interface{}, ruleRegex []string)
 	StartInput(pos position.Position, syncChan *channel.SyncChannel) position.Position
 	StartMetrics()

@@ -32,6 +32,7 @@ type MongoConfig struct {
 type StarrocksConfig struct {
 	Host     string
 	Port     int
+	LoadPort int `mapstructure:"load-port"`
 	UserName string
 	Password string
 }
@@ -56,7 +57,7 @@ type FilterConfig struct {
 
 type InputConfig struct {
 	Type          string                 `toml:"type"`
-	StartPosition string                 `toml:"start-gtid"`
+	StartPosition string                 `toml:"start-position"`
 	Config        map[string]interface{} `toml:"config"`
 }
 
