@@ -11,8 +11,10 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/position"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
 	"github.com/mitchellh/mapstructure"
 	"github.com/siddontang/go-log/log"
+	"regexp"
 	"sync"
 	"time"
 )
@@ -117,6 +119,38 @@ func (mi *MysqlInputPlugin) Close() {
 	mi.cancel()
 	mi.wg.Wait()
 	log.Infof("close mysql input metrics.")
+}
+
+func (mi *MysqlInputPlugin) SetIncludeTableRegex(config map[string]interface{}) (*regexp.Regexp, error) {
+	sourceSchema := fmt.Sprintf("%v", config["source-schema"])
+	sourceTable := fmt.Sprintf("%v", config["source-table"])
+	cacheKey := fmt.Sprintf("%v.%v", sourceSchema, sourceTable)
+	reg, err := regexp.Compile(rule.SchemaTableToStrRegex(sourceSchema, sourceTable))
+	if err != nil {
+		return reg, err
+	}
+
+	_, err = mi.canal.AddIncludeTableRegex(cacheKey, reg)
+	if err != nil {
+		return reg, err
+	}
+	return reg, nil
+}
+
+func (mi *MysqlInputPlugin) RemoveIncludeTableRegex(config map[string]interface{}) (*regexp.Regexp, error) {
+	sourceSchema := fmt.Sprintf("%v", config["source-schema"])
+	sourceTable := fmt.Sprintf("%v", config["source-table"])
+	cacheKey := fmt.Sprintf("%v.%v", sourceSchema, sourceTable)
+	reg, err := regexp.Compile(rule.SchemaTableToStrRegex(sourceSchema, sourceTable))
+	if err != nil {
+		return reg, err
+	}
+
+	_, err = mi.canal.DelIncludeTableRegex(cacheKey, reg)
+	if err != nil {
+		return reg, err
+	}
+	return reg, nil
 }
 
 func (mi *MysqlInputPlugin) OnRow(e *canal.RowsEvent) error {

@@ -12,11 +12,13 @@ type DorisRules struct {
 }
 
 type DorisRule struct {
-	SourceSchema string `toml:"source-schema" json:"source-schema" mapstructure:"source-schema"`
-	SourceTable  string `toml:"source-table" json:"source-table" mapstructure:"source-table"`
-	TargetSchema string `toml:"target-schema" json:"target-schema" mapstructure:"target-schema"`
-	TargetTable  string `toml:"target-table" json:"target-table" mapstructure:"target-table"`
-	RuleType     string `default:"init"` // init、dynamic add
+	SourceSchema string   `toml:"source-schema" json:"source-schema" mapstructure:"source-schema"`
+	SourceTable  string   `toml:"source-table" json:"source-table" mapstructure:"source-table"`
+	TargetSchema string   `toml:"target-schema" json:"target-schema" mapstructure:"target-schema"`
+	TargetTable  string   `toml:"target-table" json:"target-table" mapstructure:"target-table"`
+	RuleType     RuleType `default:"init"` // init、dynamic add
+	// for api delete rule, only logical deleted, fix output get ruleMap failed problem. when add the same rule physical deleted
+	Deleted bool `default:"false"`
 }
 
 func (drs *DorisRules) NewRule(config map[string]interface{}) {
@@ -24,6 +26,11 @@ func (drs *DorisRules) NewRule(config map[string]interface{}) {
 	err := mapstructure.Decode(configRules, &drs.Rules)
 	if err != nil {
 		log.Fatal("output.config.rule config parsing failed. err: ", err.Error())
+	}
+	// init
+	for i := range drs.Rules {
+		drs.Rules[i].RuleType = TypeInit
+		drs.Rules[i].Deleted = false
 	}
 	drs.RuleToRegex()
 	drs.RuleToMap()
@@ -35,7 +42,7 @@ func (drs *DorisRules) RuleToRegex() {
 	}
 	for _, r := range drs.Rules {
 		// cfg.IncludeTableRegex[0] = "test\\..*"
-		drs.RulesRegex = append(drs.RulesRegex, "^"+r.SourceSchema+"\\."+r.SourceTable+"$")
+		drs.RulesRegex = append(drs.RulesRegex, SchemaTableToStrRegex(r.SourceSchema, r.SourceTable))
 	}
 }
 
@@ -45,7 +52,7 @@ func (drs *DorisRules) RuleToMap() {
 	}
 	drs.RulesMap = make(map[string]interface{})
 	for _, r := range drs.Rules {
-		drs.RulesMap[r.SourceSchema+":"+r.SourceTable] = r
+		drs.RulesMap[RuleKeyFormat(r.SourceSchema, r.SourceTable)] = r
 	}
 }
 

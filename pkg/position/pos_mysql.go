@@ -34,9 +34,11 @@ func (pos *MysqlPosition) LoadPosition(config *config.BaseConfig) {
 	positionFilePath := GetPositionFilePath(config)
 	initPositionData := "binlog-name = \"\"\nbinlog-pos = 0\nbinlog-gtid = \"\""
 	FindPositionFileNotCreate(positionFilePath, initPositionData)
-	if _, err = toml.DecodeFile(positionFilePath, &pos); err != nil {
+	basePos := &mysqlBasePosition{}
+	if _, err = toml.DecodeFile(positionFilePath, basePos); err != nil {
 		log.Fatal(err)
 	}
+	pos.mysqlBasePosition = basePos
 	pos.FilePath = positionFilePath
 
 	if pos.BinlogGTID != "" {

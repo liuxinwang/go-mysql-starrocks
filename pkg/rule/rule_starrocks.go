@@ -12,11 +12,13 @@ type StarrocksRules struct {
 }
 
 type StarrocksRule struct {
-	SourceSchema string `toml:"source-schema" json:"source-schema" mapstructure:"source-schema"`
-	SourceTable  string `toml:"source-table" json:"source-table" mapstructure:"source-table"`
-	TargetSchema string `toml:"target-schema" json:"target-schema" mapstructure:"target-schema"`
-	TargetTable  string `toml:"target-table" json:"target-table" mapstructure:"target-table"`
-	RuleType     string `default:"init"` // init、dynamic add
+	SourceSchema string   `toml:"source-schema" json:"source-schema" mapstructure:"source-schema"`
+	SourceTable  string   `toml:"source-table" json:"source-table" mapstructure:"source-table"`
+	TargetSchema string   `toml:"target-schema" json:"target-schema" mapstructure:"target-schema"`
+	TargetTable  string   `toml:"target-table" json:"target-table" mapstructure:"target-table"`
+	RuleType     RuleType `default:"init"` // init、dynamic add
+	// for api delete rule, only logical deleted, fix output get ruleMap failed problem. when add the same rule physical deleted
+	Deleted bool `default:"false"`
 }
 
 func (srs *StarrocksRules) NewRule(config map[string]interface{}) {
@@ -24,6 +26,11 @@ func (srs *StarrocksRules) NewRule(config map[string]interface{}) {
 	err := mapstructure.Decode(configRules, &srs.Rules)
 	if err != nil {
 		log.Fatal("output.config.rule config parsing failed. err: ", err.Error())
+	}
+	// init
+	for i := range srs.Rules {
+		srs.Rules[i].RuleType = TypeInit
+		srs.Rules[i].Deleted = false
 	}
 	srs.RuleToRegex()
 	srs.RuleToMap()
@@ -34,8 +41,7 @@ func (srs *StarrocksRules) RuleToRegex() {
 		log.Fatal("rule config cannot be empty")
 	}
 	for _, r := range srs.Rules {
-		// cfg.IncludeTableRegex[0] = "test\\..*"
-		srs.RulesRegex = append(srs.RulesRegex, "^"+r.SourceSchema+"\\."+r.SourceTable+"$")
+		srs.RulesRegex = append(srs.RulesRegex, SchemaTableToStrRegex(r.SourceSchema, r.SourceTable))
 	}
 }
 
@@ -45,7 +51,7 @@ func (srs *StarrocksRules) RuleToMap() {
 	}
 	srs.RulesMap = make(map[string]interface{})
 	for _, r := range srs.Rules {
-		srs.RulesMap[r.SourceSchema+":"+r.SourceTable] = r
+		srs.RulesMap[RuleKeyFormat(r.SourceSchema, r.SourceTable)] = r
 	}
 }
 

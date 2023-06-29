@@ -22,48 +22,47 @@ import (
 	"time"
 )
 
-type Doris struct {
-	*config.DorisConfig
+type Starrocks struct {
+	*config.StarrocksConfig
 	tableLock     sync.RWMutex
 	tables        map[string]*Table
+	ruleLock      sync.RWMutex
+	rulesMap      map[string]*rule.StarrocksRule
+	lastCtlMsg    *msg.Msg
+	syncTimestamp time.Time // sync chan中last event timestamp
+	ackTimestamp  time.Time // sync data ack的 event timestamp
+	close         bool
 	wg            sync.WaitGroup
 	ctx           context.Context
 	cancel        context.CancelFunc
-	rulesMap      map[string]*rule.DorisRule
-	lastCtlMsg    *msg.Msg
-	close         bool
-	syncTimestamp time.Time // sync chan中last event timestamp
-	ackTimestamp  time.Time // sync data ack的 event timestamp
 }
 
-var DeleteCondition = fmt.Sprintf("%s=1", DeleteColumn)
-
-func (ds *Doris) NewOutput(outputConfig interface{}) {
+func (sr *Starrocks) NewOutput(outputConfig interface{}) {
 	// init map obj
-	ds.tables = make(map[string]*Table)
-	ds.rulesMap = make(map[string]*rule.DorisRule)
+	sr.tables = make(map[string]*Table)
+	sr.rulesMap = make(map[string]*rule.StarrocksRule)
 
-	ds.ctx, ds.cancel = context.WithCancel(context.Background())
+	sr.ctx, sr.cancel = context.WithCancel(context.Background())
 
-	ds.DorisConfig = &config.DorisConfig{}
-	err := mapstructure.Decode(outputConfig, ds.DorisConfig)
+	sr.StarrocksConfig = &config.StarrocksConfig{}
+	err := mapstructure.Decode(outputConfig, sr.StarrocksConfig)
 	if err != nil {
 		log.Fatal("output config parsing failed. err: ", err.Error())
 	}
-	ds.close = false
-	ds.StartMetrics()
+	sr.close = false
+	sr.StartMetrics()
 }
 
-func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[string]interface{}) {
-	if err := mapstructure.Decode(rulesMap, &ds.rulesMap); err != nil {
+func (sr *Starrocks) StartOutput(outputChan *channel.OutputChannel, rulesMap map[string]interface{}) {
+	if err := mapstructure.Decode(rulesMap, &sr.rulesMap); err != nil {
 		log.Fatal(err)
 	}
 
-	ds.wg.Add(1)
+	sr.wg.Add(1)
 
 	ticker := time.NewTicker(time.Second * time.Duration(outputChan.FLushCHanMaxWaitSecond))
 	defer ticker.Stop()
-	defer ds.wg.Done()
+	defer sr.wg.Done()
 
 	eventsLen := 0
 	schemaTableEvents := make(map[string][]*msg.Msg)
@@ -74,13 +73,13 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 			switch data := v.(type) {
 			case *msg.Msg:
 				if data.Type == msg.MsgCtl {
-					ds.lastCtlMsg = data
+					sr.lastCtlMsg = data
 					continue
 				}
 
-				ds.syncTimestamp = data.Timestamp
+				sr.syncTimestamp = data.Timestamp
 
-				schemaTable := data.Database + ":" + data.Table
+				schemaTable := rule.RuleKeyFormat(data.Database, data.Table)
 				rowsData, ok := schemaTableEvents[schemaTable]
 				if !ok {
 					schemaTableEvents[schemaTable] = make([]*msg.Msg, 0, outputChan.ChannelSize)
@@ -92,39 +91,37 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 					needFlush = true
 				}
 			}
-		case <-ds.ctx.Done():
+		case <-sr.ctx.Done():
 			needFlush = true
 			log.Infof("wait last one flush output data...")
-			ds.close = true
+			sr.close = true
 		case <-ticker.C:
 			needFlush = true
 		}
 
 		if needFlush {
 			for schemaTable := range schemaTableEvents {
-				// schema := strings.Split(schemaTable, ":")[0]
-				// table := strings.Split(schemaTable, ":")[1]
-				ruleMap, ok := ds.rulesMap[schemaTable]
+				ruleMap, ok := sr.rulesMap[schemaTable]
 				if !ok {
 					log.Fatalf("get ruleMap failed: %v", schemaTable)
 				}
-				tableObj, err := ds.GetTable(ruleMap.TargetSchema, ruleMap.TargetTable)
+				tableObj, err := sr.GetTable(ruleMap.TargetSchema, ruleMap.TargetTable)
 				if err != nil {
 					log.Fatal(err)
 				}
 
-				err = ds.Execute(schemaTableEvents[schemaTable], tableObj)
+				err = sr.Execute(schemaTableEvents[schemaTable], tableObj)
 				if err != nil {
-					log.Fatalf("do doris bulk err %v, close sync", err)
-					ds.cancel()
+					log.Fatal("do starrocks bulk err %v, close sync", err)
+					sr.cancel()
 					return
 				}
 				delete(schemaTableEvents, schemaTable)
 			}
 
 			// only start lastCtlMsg is nil
-			if ds.lastCtlMsg == nil {
-				if ds.close {
+			if sr.lastCtlMsg == nil {
+				if sr.close {
 					log.Infof("not found lastCtlMsg and output data, not last one flush.")
 					return
 				} else {
@@ -132,8 +129,8 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 				}
 			}
 
-			if ds.lastCtlMsg.AfterCommitCallback != nil {
-				err := ds.lastCtlMsg.AfterCommitCallback(ds.lastCtlMsg)
+			if sr.lastCtlMsg.AfterCommitCallback != nil {
+				err := sr.lastCtlMsg.AfterCommitCallback(sr.lastCtlMsg)
 				if err != nil {
 					log.Fatalf("ack msg failed: %v", errors.ErrorStack(err))
 				}
@@ -141,10 +138,10 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 				log.Fatalf("not found AfterCommitCallback func")
 			}
 
-			ds.ackTimestamp = ds.syncTimestamp
+			sr.ackTimestamp = sr.syncTimestamp
 			eventsLen = 0
 			// ticker.Reset(time.Second * time.Duration(outputChan.FLushCHanMaxWaitSecond))
-			if ds.close {
+			if sr.close {
 				log.Infof("last one flush output data done.")
 				return
 			}
@@ -152,40 +149,87 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 	}
 }
 
-func (ds *Doris) Execute(msgs []*msg.Msg, table *Table) error {
+func (sr *Starrocks) Execute(msgs []*msg.Msg, table *Table) error {
 	if len(msgs) == 0 {
 		return nil
 	}
 	var jsonList []string
 
-	jsonList = ds.generateJSON(msgs)
-	log.Debugf("doris bulk custom %s.%s row data num: %d", table.Schema, table.Name, len(jsonList))
+	jsonList = sr.generateJSON(msgs)
+	log.Debugf("starrocks bulk custom %s.%s row data num: %d", table.Schema, table.Name, len(jsonList))
 	for _, s := range jsonList {
-		log.Debugf("doris custom %s.%s row data: %v", table.Schema, table.Name, s)
+		log.Debugf("starrocks custom %s.%s row data: %v", table.Schema, table.Name, s)
 	}
-	//TODO ignoreColumns handle
-	return ds.sendData(jsonList, table, nil)
+	return sr.sendData(jsonList, table, nil)
 }
 
-func (ds *Doris) Close() {
-	ds.cancel()
-	ds.wg.Wait()
-	log.Infof("close doris output goroutine.")
-	log.Infof("close doris output metrics goroutine.")
+func (sr *Starrocks) Close() {
+	sr.cancel()
+	sr.wg.Wait()
+	log.Infof("close starrocks output goroutine.")
+	log.Infof("close starrocks output metrics goroutine.")
 }
 
-func (ds *Doris) GetTable(db string, table string) (*Table, error) {
+func (sr *Starrocks) AddRule(config map[string]interface{}) error {
+	sr.ruleLock.Lock()
+	defer sr.ruleLock.Unlock()
+	srr := &rule.StarrocksRule{Deleted: false}
+	if err := mapstructure.Decode(config, srr); err != nil {
+		return errors.Trace(errors.New(fmt.Sprintf("add rule config parsing failed. err: %v", err.Error())))
+	}
+	// if exists, return
+	ruleKey := rule.RuleKeyFormat(srr.SourceSchema, srr.SourceTable)
+	for _, ruleObj := range sr.rulesMap {
+		tmpRuleKey := rule.RuleKeyFormat(ruleObj.SourceSchema, ruleObj.SourceTable)
+		if ruleKey == tmpRuleKey {
+			if ruleObj.Deleted {
+				// if deleted is true, break, waiting to cover.
+				break
+			}
+			return errors.New("output table rule already exists.")
+		}
+	}
+	sr.rulesMap[rule.RuleKeyFormat(srr.SourceSchema, srr.SourceTable)] = srr
+	return nil
+}
+
+func (sr *Starrocks) DeleteRule(config map[string]interface{}) error {
+	sr.ruleLock.Lock()
+	defer sr.ruleLock.Unlock()
+	srr := &rule.StarrocksRule{}
+	if err := mapstructure.Decode(config, srr); err != nil {
+		return errors.Trace(errors.New(fmt.Sprintf("add rule config parsing failed. err: %v", err.Error())))
+	}
+	// if exists, return
+	ruleKey := rule.RuleKeyFormat(srr.SourceSchema, srr.SourceTable)
+	for _, ruleObj := range sr.rulesMap {
+		tmpRuleKey := rule.RuleKeyFormat(ruleObj.SourceSchema, ruleObj.SourceTable)
+		if ruleKey == tmpRuleKey {
+			// delete(sr.rulesMap, ruleKey)
+			// only mark deleted
+			sr.rulesMap[ruleKey].Deleted = true
+			return nil
+		}
+	}
+	return errors.New("output table rule not exists.")
+}
+
+func (sr *Starrocks) GetRules() interface{} {
+	return sr.rulesMap
+}
+
+func (sr *Starrocks) GetTable(db string, table string) (*Table, error) {
 	key := fmt.Sprintf("%s.%s", db, table)
-	ds.tableLock.RLock()
-	t, ok := ds.tables[key]
-	ds.tableLock.RUnlock()
+	sr.tableLock.RLock()
+	t, ok := sr.tables[key]
+	sr.tableLock.RUnlock()
 	if ok {
 		return t, nil
 	}
 
 	conn, err := client.Connect(
-		fmt.Sprintf("%s:%d", ds.Host, ds.Port),
-		ds.UserName, ds.Password, db)
+		fmt.Sprintf("%s:%d", sr.Host, sr.Port),
+		sr.UserName, sr.Password, db)
 	if err != nil {
 		return nil, err
 	}
@@ -207,14 +251,14 @@ func (ds *Doris) GetTable(db string, table string) (*Table, error) {
 		name, _ := rs.GetString(i, 0)
 		ta.Columns = append(ta.Columns, name)
 	}
-	ds.tableLock.Lock()
-	ds.tables[key] = ta
-	ds.tableLock.Unlock()
+	sr.tableLock.Lock()
+	sr.tables[key] = ta
+	sr.tableLock.Unlock()
 	defer rs.Close()
 	return ta, nil
 }
 
-func (ds *Doris) generateJSON(msgs []*msg.Msg) []string {
+func (sr *Starrocks) generateJSON(msgs []*msg.Msg) []string {
 	var jsonList []string
 
 	for _, event := range msgs {
@@ -239,7 +283,7 @@ func (ds *Doris) generateJSON(msgs []*msg.Msg) []string {
 	return jsonList
 }
 
-func (ds *Doris) sendData(content []string, table *Table, ignoreColumns []string) error {
+func (sr *Starrocks) sendData(content []string, table *Table, ignoreColumns []string) error {
 	cli := &http.Client{
 		/** CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			req.Header.Add("Authorization", "Basic "+sr.auth())
@@ -247,35 +291,34 @@ func (ds *Doris) sendData(content []string, table *Table, ignoreColumns []string
 		}, */
 	}
 	loadUrl := fmt.Sprintf("http://%s:%d/api/%s/%s/_stream_load",
-		ds.Host, ds.LoadPort, table.Schema, table.Name)
+		sr.Host, sr.LoadPort, table.Schema, table.Name)
 	newContent := `[` + strings.Join(content, ",") + `]`
 	req, _ := http.NewRequest("PUT", loadUrl, strings.NewReader(newContent))
 
 	// req.Header.Add
-	req.Header.Add("Authorization", "Basic "+ds.auth())
+	req.Header.Add("Authorization", "Basic "+sr.auth())
 	req.Header.Add("Expect", "100-continue")
 	req.Header.Add("strict_mode", "true")
 	// req.Header.Add("label", "39c25a5c-7000-496e-a98e-348a264c81de")
 	req.Header.Add("format", "json")
 	req.Header.Add("strip_outer_array", "true")
-	req.Header.Add("merge_type", "MERGE")
-	req.Header.Add("delete", DeleteCondition)
+
 	var columnArray []string
 	for _, column := range table.Columns {
-		if ds.isContain(ignoreColumns, column) {
+		if sr.isContain(ignoreColumns, column) {
 			continue
 		}
 		columnArray = append(columnArray, column)
 	}
 	columnArray = append(columnArray, DeleteColumn)
-	columns := fmt.Sprintf("%s", strings.Join(columnArray, ","))
+	columns := fmt.Sprintf("%s, __op = %s", strings.Join(columnArray, ","), DeleteColumn)
 	req.Header.Add("columns", columns)
 
 	response, err := cli.Do(req)
 	if err != nil {
 		return errors.Trace(err)
 	}
-	returnMap, err := ds.parseResponse(response)
+	returnMap, err := sr.parseResponse(response)
 	if returnMap["Status"] != "Success" {
 		message := returnMap["Message"]
 		errorUrl := returnMap["ErrorURL"]
@@ -290,15 +333,15 @@ func (ds *Doris) sendData(content []string, table *Table, ignoreColumns []string
 	return nil
 }
 
-func (ds *Doris) auth() string {
-	s := ds.UserName + ":" + ds.Password
+func (sr *Starrocks) auth() string {
+	s := sr.UserName + ":" + sr.Password
 	b := []byte(s)
 
 	sEnc := base64.StdEncoding.EncodeToString(b)
 	return sEnc
 }
 
-func (ds *Doris) isContain(items []string, item string) bool {
+func (sr *Starrocks) isContain(items []string, item string) bool {
 	if len(items) == 0 {
 		return false
 	}
@@ -310,7 +353,7 @@ func (ds *Doris) isContain(items []string, item string) bool {
 	return false
 }
 
-func (ds *Doris) parseResponse(response *http.Response) (map[string]interface{}, error) {
+func (sr *Starrocks) parseResponse(response *http.Response) (map[string]interface{}, error) {
 	var result map[string]interface{}
 	body, err := ioutil.ReadAll(response.Body)
 	if err == nil {
@@ -320,14 +363,14 @@ func (ds *Doris) parseResponse(response *http.Response) (map[string]interface{},
 	return result, err
 }
 
-func (ds *Doris) StartMetrics() {
-	ds.promTimingMetrics()
+func (sr *Starrocks) StartMetrics() {
+	sr.promTimingMetrics()
 }
 
-func (ds *Doris) promTimingMetrics() {
-	ds.wg.Add(1)
+func (sr *Starrocks) promTimingMetrics() {
+	sr.wg.Add(1)
 	go func() {
-		defer ds.wg.Done()
+		defer sr.wg.Done()
 		ticker := time.NewTicker(time.Second * 3)
 		defer ticker.Stop()
 		var newDelaySeconds uint32
@@ -336,14 +379,14 @@ func (ds *Doris) promTimingMetrics() {
 			case <-ticker.C:
 				// prom write delay set
 				now := time.Now()
-				if ds.syncTimestamp.IsZero() || ds.ackTimestamp.IsZero() || ds.syncTimestamp == ds.ackTimestamp {
+				if sr.syncTimestamp.IsZero() || sr.ackTimestamp.IsZero() || sr.syncTimestamp == sr.ackTimestamp {
 					newDelaySeconds = 0
 				} else {
-					newDelaySeconds = uint32(now.Sub(ds.ackTimestamp).Seconds())
+					newDelaySeconds = uint32(now.Sub(sr.ackTimestamp).Seconds())
 				}
 				// log.Debugf("write delay %vs", newDelay)
 				metrics.DelayWriteTime.Set(float64(newDelaySeconds))
-			case <-ds.ctx.Done():
+			case <-sr.ctx.Done():
 				return
 			}
 		}

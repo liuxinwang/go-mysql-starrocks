@@ -9,6 +9,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/position"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
 	"github.com/mitchellh/mapstructure"
 	"github.com/siddontang/go-log/log"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -22,15 +23,16 @@ import (
 
 type MongoInputPlugin struct {
 	*config.MongoConfig
-	Client            *mongo.Client
-	ChangeStream      *mongo.ChangeStream
-	syncChan          *channel.SyncChannel
-	position          position.Position
-	includeTableRegex []*regexp.Regexp
-	delay             *uint32
-	wg                sync.WaitGroup
-	ctx               context.Context
-	cancel            context.CancelFunc
+	Client                *mongo.Client
+	ChangeStream          *mongo.ChangeStream
+	syncChan              *channel.SyncChannel
+	position              position.Position
+	includeTableRegexLock sync.RWMutex
+	includeTableRegex     []*regexp.Regexp
+	delay                 *uint32
+	wg                    sync.WaitGroup
+	ctx                   context.Context
+	cancel                context.CancelFunc
 }
 
 type mongoInputContext struct {
@@ -146,6 +148,44 @@ func (mi *MongoInputPlugin) Close() {
 	log.Infof("close mongo input metrics.")
 }
 
+func (mi *MongoInputPlugin) SetIncludeTableRegex(config map[string]interface{}) (*regexp.Regexp, error) {
+	mi.includeTableRegexLock.Lock()
+	defer mi.includeTableRegexLock.Unlock()
+	sourceSchema := fmt.Sprintf("%v", config["source-schema"])
+	sourceTable := fmt.Sprintf("%v", config["source-table"])
+	reg, err := regexp.Compile(rule.SchemaTableToStrRegex(sourceSchema, sourceTable))
+	if err != nil {
+		return reg, err
+	}
+	// if exists, return
+	for _, regex := range mi.includeTableRegex {
+		if regex.String() == reg.String() {
+			return reg, errors.New("table rule already exists.")
+		}
+	}
+	mi.includeTableRegex = append(mi.includeTableRegex, reg)
+	return reg, nil
+}
+
+func (mi *MongoInputPlugin) RemoveIncludeTableRegex(config map[string]interface{}) (*regexp.Regexp, error) {
+	mi.includeTableRegexLock.Lock()
+	defer mi.includeTableRegexLock.Unlock()
+	sourceSchema := fmt.Sprintf("%v", config["source-schema"])
+	sourceTable := fmt.Sprintf("%v", config["source-table"])
+	reg, err := regexp.Compile(rule.SchemaTableToStrRegex(sourceSchema, sourceTable))
+	if err != nil {
+		return reg, err
+	}
+	// if exists remove
+	for i, regex := range mi.includeTableRegex {
+		if regex.String() == reg.String() {
+			mi.includeTableRegex = append(mi.includeTableRegex[:i], mi.includeTableRegex[i+1:]...)
+			return reg, nil
+		}
+	}
+	return reg, errors.New("table rule not exists.")
+}
+
 func (mi *MongoInputPlugin) msgHandle() {
 	var event = &streamObject{}
 	if err := mi.ChangeStream.Decode(event); err != nil {
@@ -202,10 +242,10 @@ func (mi *MongoInputPlugin) eventPreProcessing(e *streamObject) *msg.Msg {
 		dataMsg.DmlMsg.Action = msg.UpdateAction
 		if e.FullDocument == nil {
 			dataMsg.DmlMsg.Data = e.DocumentKey
-			for key, _ := range e.UpdateDescription {
+			for key := range e.UpdateDescription {
 				if key == "updatedFields" {
 					updatedFields := e.UpdateDescription["updatedFields"].(map[string]interface{})
-					for updKey, _ := range updatedFields {
+					for updKey := range updatedFields {
 						dataMsg.DmlMsg.Data[updKey] = updatedFields[updKey]
 					}
 					break
@@ -260,6 +300,7 @@ func (mi *MongoInputPlugin) setDelay(e *streamObject) {
 	}
 	atomic.StoreUint32(mi.delay, newDelay)
 }
+
 func (mi *MongoInputPlugin) GetDelay() uint32 {
 	return atomic.LoadUint32(mi.delay)
 }

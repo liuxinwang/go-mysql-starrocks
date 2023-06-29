@@ -2,6 +2,7 @@ package main
 
 import (
 	"fmt"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/api"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/channel"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/filter"
@@ -67,12 +68,8 @@ func main() {
 	// Start prometheus http monitor
 	go func() {
 		metrics.OpsStartTime.Set(float64(time.Now().Unix()))
-		log.Infof("starting http monitor on port %d.", *help.HttpPort)
+		log.Infof("starting http on port %d.", *help.HttpPort)
 		http.Handle("/metrics", promhttp.Handler())
-		//TODO
-		// http.HandleFunc("/api/addRule", api.AddRuleHandle(h))
-		// http.HandleFunc("/api/delRule", api.DelRuleHandle(h))
-		// http.HandleFunc("/api/getRule", api.GetRuleHandle(h))
 		httpPortAddr := fmt.Sprintf(":%d", *help.HttpPort)
 		err := http.ListenAndServe(httpPortAddr, nil)
 		if err != nil {
@@ -91,7 +88,7 @@ func main() {
 	var syncChan *channel.SyncChannel
 	var outputChan *channel.OutputChannel
 	var matcherFilter filter.MatcherFilter
-	var oo output.PluginOutput
+	var oo output.Plugin
 
 	// 初始化channel
 	syncChan = &channel.SyncChannel{}
@@ -146,6 +143,12 @@ func main() {
 	matcherFilter.StartFilter(syncChan, outputChan)
 	// 启动output插件
 	go oo.StartOutput(outputChan, rr.GetRuleToMap())
+
+	// TODO
+	// api handle
+	http.HandleFunc("/api/addRule", api.AddRuleHandle(ip, oo))
+	http.HandleFunc("/api/delRule", api.DelRuleHandle(ip, oo))
+	http.HandleFunc("/api/getRule", api.GetRuleHandle(oo))
 
 	select {
 	case n := <-sc:

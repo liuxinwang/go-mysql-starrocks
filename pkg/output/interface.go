@@ -10,4 +10,7 @@ type Plugin interface {
 	StartOutput(outputChan *channel.OutputChannel, rulesMap map[string]interface{})
 	Execute(msgs []*msg.Msg, tableObj *Table) error
 	Close()
+	AddRule(map[string]interface{}) error
+	DeleteRule(map[string]interface{}) error
+	GetRules() interface{}
 }
