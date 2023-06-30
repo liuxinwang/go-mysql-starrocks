@@ -144,7 +144,6 @@ func main() {
 	// 启动output插件
 	go oo.StartOutput(outputChan, rr.GetRuleToMap())
 
-	// TODO
 	// api handle
 	http.HandleFunc("/api/addRule", api.AddRuleHandle(ip, oo))
 	http.HandleFunc("/api/delRule", api.DelRuleHandle(ip, oo))
