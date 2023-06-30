@@ -19,18 +19,13 @@ mysql-to-starrocks.toml
 name = "mysql2starrocks"
 
 [input]
+type = "mysql"
 # 指定初次监听开始的gtid点位，当_xxx-pos.info点位文件内容存在时，此选项不生效
 # start-gtid = "3ba13781-44eb-2157-88a5-0dc879ec2221:1-123456"
 
-[mysql] # mysql连接信息
+[input.config.source] # mysql连接信息
 host = "127.0.0.1"
 port = 3306
-username = "root"
-password = ""
-
-[starrocks] # starrocks连接信息
-host = "127.0.0.1"
-port = 8040
 username = "root"
 password = ""
 
@@ -50,18 +45,36 @@ flush-delay-second = 10
 #[[filter]]
 #type = "convert-dml-column" # 转换dml行字段类型为json，column varchar（mysql） -> column json（starrocks）
 #[filter.config]
-#match-schema = "test"
+#match-schema = "mysql_test"
 #match-table = "tb1"
 #columns = ["varchar_json_column", "varchar_arrayjson_column"]
 #cast-as = ["json", "arrayJson"] # json示例: {"id": 1, "name": 'zhangsan'}, arrayJson示例: [{"id": 1, "name": 'zhangsan'}, {"id": 1, "name": 'lisi'}]
 
-[[rule]] # 库表同步映射1
+#[[filter]]
+#type = "rename-dml-column"
+#[filter.config]
+#match-schema = "mysql_test"
+#match-table = "tb1"
+#columns = ["col_1", "col_2"]
+#rename-as = ["col_11", "col_22"]
+
+[output]
+type = "starrocks"
+
+[output.config.target] # starrocks连接信息
+host = "127.0.0.1"
+port = 9030
+load-port = 8040
+username = "root"
+password = ""
+
+[[output.config.rule]] # 库表同步映射1
 source-schema = "mysql_test"
 source-table = "tb1"
 target-schema = "starrocks_test"
 target-table = "tb1"
 
-[[rule]] # 库表同步映射2
+[[output.config.rule]] # 库表同步映射2
 source-schema = "mysql_test"
 source-table = "tb2"
 target-schema = "starrocks_test"
@@ -70,24 +83,24 @@ target-table = "tb2"
 
 #### 2. 启动
 ```shell
-[sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml
+[sr@ ~]$ ./go-mysql-sr-linux-xxxxxx -config mysql-to-starrocks.toml
 ```
 
 #### 3. 查看日志
 默认输出到控制台，指定log-file参数运行
 ```shell
-[sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log
+[sr@ ~]$ ./go-mysql-sr-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log
 [sr@ ~]$ tail -f mysql2starrocks.log
 ```
 
 #### 4. 查看帮助
 ```shell
-[sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -h
+[sr@ ~]$ ./go-mysql-sr-linux-xxxxxx -h
 ```
 
 #### 5. 后台运行
 ```shell
-[sr@ ~]$ ./go-mysql-starrocks-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log -level info -daemon
+[sr@ ~]$ ./go-mysql-sr-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log -level info -daemon
 ```
 
 #### 6. 监控
@@ -143,21 +156,24 @@ curl -s localhost:6166/api/getRule | python -m json.tool
         "source-table": "tb1",
         "target-schema": "starrocks_test",
         "target-table": "tb1",
-        "RuleType": "init"
+        "RuleType": "init",
+        "Deleted": false
     },
     "mysql_test:tb2": {
         "source-schema": "mysql_test",
         "source-table": "tb2",
         "target-schema": "starrocks_test",
         "target-table": "tb2",
-        "RuleType": "init"
+        "RuleType": "init",
+        "Deleted": false
     },
     "mysql_test:tb3": {
         "source-schema": "mysql_test",
         "source-table": "tb3",
         "target-schema": "starrocks_test",
         "target-table": "tb3",
-        "RuleType": "dynamic add"
+        "RuleType": "dynamic add",
+        "Deleted": false
     }
 }
 ```
