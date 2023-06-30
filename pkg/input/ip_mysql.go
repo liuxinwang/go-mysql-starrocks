@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/go-mysql-org/go-mysql/canal"
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/go-mysql-org/go-mysql/schema"
 	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/channel"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
@@ -177,9 +178,9 @@ func (mi *MysqlInputPlugin) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 		for _, row := range e.Rows {
 			data := make(map[string]interface{})
 			for j := 0; j < len(e.Table.Columns); j++ {
-				data[e.Table.Columns[j].Name] = row[j]
+				data[e.Table.Columns[j].Name] = deserialize(row[j], e.Table.Columns[j])
 			}
-			log.Debugf("msg event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, row)
+			log.Debugf("msg event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, data)
 			msgs = append(msgs, &msg.Msg{
 				Table:     e.Table.Name,
 				Database:  e.Table.Schema,
@@ -199,10 +200,10 @@ func (mi *MysqlInputPlugin) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 			data := make(map[string]interface{})
 			old := make(map[string]interface{})
 			for j := 0; j < len(e.Table.Columns); j++ {
-				data[e.Table.Columns[j].Name] = row[j]
-				old[e.Table.Columns[j].Name] = e.Rows[i-1][j]
+				data[e.Table.Columns[j].Name] = deserialize(row[j], e.Table.Columns[j])
+				old[e.Table.Columns[j].Name] = deserialize(e.Rows[i-1][j], e.Table.Columns[j])
 			}
-			log.Debugf("msg event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, row)
+			log.Debugf("msg event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, data)
 			msgs = append(msgs, &msg.Msg{
 				Table:     e.Table.Name,
 				Database:  e.Table.Schema,
@@ -217,9 +218,9 @@ func (mi *MysqlInputPlugin) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 		for _, row := range e.Rows {
 			data := make(map[string]interface{})
 			for j := 0; j < len(e.Table.Columns); j++ {
-				data[e.Table.Columns[j].Name] = row[j]
+				data[e.Table.Columns[j].Name] = deserialize(row[j], e.Table.Columns[j])
 			}
-			log.Debugf("msg event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, row)
+			log.Debugf("msg event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, data)
 			msgs = append(msgs, &msg.Msg{
 				Table:     e.Table.Name,
 				Database:  e.Table.Schema,
@@ -263,4 +264,19 @@ func (mi *MysqlInputPlugin) promTimingMetrics() {
 			}
 		}
 	}()
+}
+
+func deserialize(raw interface{}, column schema.TableColumn) interface{} {
+	if raw == nil {
+		return nil
+	}
+
+	ret := raw
+	if column.RawType == "text" || column.RawType == "json" {
+		_, ok := raw.([]uint8)
+		if ok {
+			ret = string(raw.([]uint8))
+		}
+	}
+	return ret
 }
