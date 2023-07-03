@@ -257,6 +257,11 @@ func (mi *MongoInputPlugin) eventPreProcessing(e *streamObject) *msg.Msg {
 	case msg.DeleteAction:
 		dataMsg.DmlMsg.Action = msg.DeleteAction
 		dataMsg.DmlMsg.Data = e.DocumentKey
+	case msg.ReplaceAction:
+		dataMsg.DmlMsg.Action = msg.ReplaceAction
+		dataMsg.DmlMsg.Data = e.FullDocument
+	default:
+		log.Fatalf("unhandled message type: %s", e)
 	}
 	log.Debugf("msg event: %s %s.%s %v", e.OperationType, e.Ns.Database, e.Ns.Collection, dataMsg.DmlMsg.Data)
 	return dataMsg

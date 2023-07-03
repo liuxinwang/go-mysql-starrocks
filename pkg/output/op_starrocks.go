@@ -279,6 +279,13 @@ func (sr *Starrocks) generateJSON(msgs []*msg.Msg) []string {
 			event.DmlMsg.Data[DeleteColumn] = 1
 			b, _ := json.Marshal(event.DmlMsg.Data)
 			jsonList = append(jsonList, string(b))
+		case msg.ReplaceAction: // for mongo
+			// 增加虚拟列，标识操作类型 (stream load opType：UPSERT 0，DELETE：1)
+			event.DmlMsg.Data[DeleteColumn] = 0
+			b, _ := json.Marshal(event.DmlMsg.Data)
+			jsonList = append(jsonList, string(b))
+		default:
+			log.Fatalf("unhandled message type: %s", event)
 		}
 	}
 	return jsonList
