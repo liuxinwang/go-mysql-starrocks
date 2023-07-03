@@ -32,6 +32,8 @@ type Doris struct {
 	syncTimestamp time.Time // sync chan中last event timestamp
 	ackTimestamp  time.Time // sync data ack的 event timestamp
 	close         bool
+	connLock      sync.Mutex
+	conn          *client.Conn
 	wg            sync.WaitGroup
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -53,6 +55,11 @@ func (ds *Doris) NewOutput(outputConfig interface{}) {
 	}
 	ds.close = false
 	ds.StartMetrics()
+	// init conn
+	ds.conn, err = client.Connect(fmt.Sprintf("%s:%d", ds.Host, ds.Port), ds.UserName, ds.Password, "")
+	if err != nil {
+		log.Fatal("output config conn failed. err: ", err.Error())
+	}
 }
 
 func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[string]interface{}) {
@@ -168,6 +175,13 @@ func (ds *Doris) Execute(msgs []*msg.Msg, table *Table) error {
 
 func (ds *Doris) Close() {
 	ds.cancel()
+	ds.connLock.Lock()
+	err := ds.conn.Close()
+	if err != nil {
+		log.Fatalf("close doris output err: %v", err.Error())
+	}
+	ds.conn = nil
+	ds.connLock.Unlock()
 	ds.wg.Wait()
 	log.Infof("close doris output goroutine.")
 	log.Infof("close doris output metrics goroutine.")
@@ -230,34 +244,22 @@ func (ds *Doris) GetTable(db string, table string) (*Table, error) {
 		return t, nil
 	}
 
-	conn, err := client.Connect(
-		fmt.Sprintf("%s:%d", ds.Host, ds.Port),
-		ds.UserName, ds.Password, db)
-	if err != nil {
-		return nil, err
-	}
-	err = conn.Ping()
-	if err != nil {
-		return nil, err
-	}
-	var rs *mysql.Result
-	rs, err = conn.Execute(fmt.Sprintf("show full columns from `%s`.`%s`", db, table))
+	r, err := ds.ExecuteSQL(fmt.Sprintf("show full columns from `%s`.`%s`", db, table))
 	if err != nil {
 		return nil, err
 	}
 	ta := &Table{
 		Schema:  db,
 		Name:    table,
-		Columns: make([]string, 0, 2),
+		Columns: make([]string, 0, 16),
 	}
-	for i := 0; i < rs.RowNumber(); i++ {
-		name, _ := rs.GetString(i, 0)
+	for i := 0; i < r.RowNumber(); i++ {
+		name, _ := r.GetString(i, 0)
 		ta.Columns = append(ta.Columns, name)
 	}
 	ds.tableLock.Lock()
 	ds.tables[key] = ta
 	ds.tableLock.Unlock()
-	defer rs.Close()
 	return ta, nil
 }
 
@@ -395,4 +397,34 @@ func (ds *Doris) promTimingMetrics() {
 			}
 		}
 	}()
+}
+
+func (ds *Doris) ExecuteSQL(cmd string, args ...interface{}) (rr *mysql.Result, err error) {
+	ds.connLock.Lock()
+	defer ds.connLock.Unlock()
+	argF := make([]func(*client.Conn), 0)
+	retryNum := 3
+	for i := 0; i < retryNum; i++ {
+		if ds.conn == nil {
+			ds.conn, err = client.Connect(fmt.Sprintf("%s:%d", ds.Host, ds.Port), ds.UserName, ds.Password, "", argF...)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+		}
+
+		rr, err = ds.conn.Execute(cmd, args...)
+		if err != nil && !mysql.ErrorEqual(err, mysql.ErrBadConn) {
+			return
+		} else if mysql.ErrorEqual(err, mysql.ErrBadConn) {
+			err := ds.conn.Close()
+			if err != nil {
+				return nil, err
+			}
+			ds.conn = nil
+			continue
+		} else {
+			return
+		}
+	}
+	return
 }

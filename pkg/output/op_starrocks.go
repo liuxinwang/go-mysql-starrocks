@@ -32,6 +32,8 @@ type Starrocks struct {
 	syncTimestamp time.Time // sync chan中last event timestamp
 	ackTimestamp  time.Time // sync data ack的 event timestamp
 	close         bool
+	connLock      sync.Mutex
+	conn          *client.Conn
 	wg            sync.WaitGroup
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -51,6 +53,11 @@ func (sr *Starrocks) NewOutput(outputConfig interface{}) {
 	}
 	sr.close = false
 	sr.StartMetrics()
+	// init conn
+	sr.conn, err = client.Connect(fmt.Sprintf("%s:%d", sr.Host, sr.Port), sr.UserName, sr.Password, "")
+	if err != nil {
+		log.Fatal("output config conn failed. err: ", err.Error())
+	}
 }
 
 func (sr *Starrocks) StartOutput(outputChan *channel.OutputChannel, rulesMap map[string]interface{}) {
@@ -112,7 +119,7 @@ func (sr *Starrocks) StartOutput(outputChan *channel.OutputChannel, rulesMap map
 
 				err = sr.Execute(schemaTableEvents[schemaTable], tableObj)
 				if err != nil {
-					log.Fatal("do starrocks bulk err %v, close sync", err)
+					log.Fatalf("do starrocks bulk err %v, close sync", err)
 					sr.cancel()
 					return
 				}
@@ -165,6 +172,13 @@ func (sr *Starrocks) Execute(msgs []*msg.Msg, table *Table) error {
 
 func (sr *Starrocks) Close() {
 	sr.cancel()
+	sr.connLock.Lock()
+	err := sr.conn.Close()
+	if err != nil {
+		log.Fatalf("close starrocks output err: %v", err.Error())
+	}
+	sr.conn = nil
+	sr.connLock.Unlock()
 	sr.wg.Wait()
 	log.Infof("close starrocks output goroutine.")
 	log.Infof("close starrocks output metrics goroutine.")
@@ -226,35 +240,22 @@ func (sr *Starrocks) GetTable(db string, table string) (*Table, error) {
 	if ok {
 		return t, nil
 	}
-
-	conn, err := client.Connect(
-		fmt.Sprintf("%s:%d", sr.Host, sr.Port),
-		sr.UserName, sr.Password, db)
-	if err != nil {
-		return nil, err
-	}
-	err = conn.Ping()
-	if err != nil {
-		return nil, err
-	}
-	var rs *mysql.Result
-	rs, err = conn.Execute(fmt.Sprintf("show full columns from `%s`.`%s`", db, table))
+	r, err := sr.ExecuteSQL(fmt.Sprintf("show full columns from `%s`.`%s`", db, table))
 	if err != nil {
 		return nil, err
 	}
 	ta := &Table{
 		Schema:  db,
 		Name:    table,
-		Columns: make([]string, 0, 2),
+		Columns: make([]string, 0, 16),
 	}
-	for i := 0; i < rs.RowNumber(); i++ {
-		name, _ := rs.GetString(i, 0)
+	for i := 0; i < r.RowNumber(); i++ {
+		name, _ := r.GetString(i, 0)
 		ta.Columns = append(ta.Columns, name)
 	}
 	sr.tableLock.Lock()
 	sr.tables[key] = ta
 	sr.tableLock.Unlock()
-	defer rs.Close()
 	return ta, nil
 }
 
@@ -391,4 +392,34 @@ func (sr *Starrocks) promTimingMetrics() {
 			}
 		}
 	}()
+}
+
+func (sr *Starrocks) ExecuteSQL(cmd string, args ...interface{}) (rr *mysql.Result, err error) {
+	sr.connLock.Lock()
+	defer sr.connLock.Unlock()
+	argF := make([]func(*client.Conn), 0)
+	retryNum := 3
+	for i := 0; i < retryNum; i++ {
+		if sr.conn == nil {
+			sr.conn, err = client.Connect(fmt.Sprintf("%s:%d", sr.Host, sr.Port), sr.UserName, sr.Password, "", argF...)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+		}
+
+		rr, err = sr.conn.Execute(cmd, args...)
+		if err != nil && !mysql.ErrorEqual(err, mysql.ErrBadConn) {
+			return
+		} else if mysql.ErrorEqual(err, mysql.ErrBadConn) {
+			err := sr.conn.Close()
+			if err != nil {
+				return nil, err
+			}
+			sr.conn = nil
+			continue
+		} else {
+			return
+		}
+	}
+	return
 }
