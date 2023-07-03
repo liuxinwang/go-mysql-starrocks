@@ -15,7 +15,7 @@ name = "mongo2starrocks"
 [input]
 type = "mongo"
 # 指定初次监听开始时间点，当_xxx-pos.info点位文件内容存在时，此选项不生效
-start-position = "2023-03-27T11:00:00"
+start-position = "2023-03-27 11:00:00"
 
 [input.config.source]
 uri = "192.168.0.1:3717,192.168.0.2:3717,192.168.0.3:3717/admin?replicaSet=mgset-xxxxx"
