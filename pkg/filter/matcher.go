@@ -5,6 +5,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/siddontang/go-log/log"
 )
 
@@ -55,7 +56,7 @@ func (matcher MatcherFilter) IterateFilter(msg *msg.Msg) bool {
 	return false
 }
 
-func (matcher MatcherFilter) StartFilter(syncChan *channel.SyncChannel, outputChan *channel.OutputChannel) {
+func (matcher MatcherFilter) StartFilter(syncChan *channel.SyncChannel, outputChan *channel.OutputChannel, inSchema schema.Schema) {
 	// 消费syncChan
 	go func() {
 		for {
@@ -71,6 +72,13 @@ func (matcher MatcherFilter) StartFilter(syncChan *channel.SyncChannel, outputCh
 						if data.Type == msg.MsgDML {
 							// prom read event number counter
 							metrics.OpsReadProcessed.Inc()
+							if data.PluginName == msg.MongoPlugin {
+								// add table cache for mongo
+								err := inSchema.AddTableForMsg(data)
+								if err != nil {
+									log.Fatalf("add table meta for msg missing: %v", data)
+								}
+							}
 						}
 					}
 				}

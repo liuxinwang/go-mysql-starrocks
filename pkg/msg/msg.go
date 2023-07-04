@@ -4,6 +4,7 @@ import "time"
 
 type MsgType string
 type ActionType string
+type PluginName string
 
 const (
 	MsgDML MsgType = "dml"
@@ -14,6 +15,9 @@ const (
 	UpdateAction  ActionType = "update"
 	DeleteAction  ActionType = "delete"
 	ReplaceAction ActionType = "replace"
+
+	MysqlPlugin PluginName = "Mysql"
+	MongoPlugin PluginName = "Mongo"
 )
 
 type Msg struct {
@@ -22,6 +26,7 @@ type Msg struct {
 	Type                MsgType
 	DmlMsg              *DMLMsg
 	DdlMsg              *DDLMsg
+	PluginName          PluginName
 	ResumeToken         *WatchId `bson:"_id"`
 	Timestamp           time.Time
 	InputContext        interface{}

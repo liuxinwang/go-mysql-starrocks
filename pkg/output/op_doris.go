@@ -13,6 +13,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/mitchellh/mapstructure"
 	"github.com/siddontang/go-log/log"
 	"io/ioutil"
@@ -25,7 +26,7 @@ import (
 type Doris struct {
 	*config.DorisConfig
 	tableLock     sync.RWMutex
-	tables        map[string]*Table
+	tables        map[string]*schema.Table
 	ruleLock      sync.RWMutex
 	rulesMap      map[string]*rule.DorisRule
 	lastCtlMsg    *msg.Msg
@@ -34,6 +35,8 @@ type Doris struct {
 	close         bool
 	connLock      sync.Mutex
 	conn          *client.Conn
+	inSchema      schema.Schema
+	outSchema     schema.Schema
 	wg            sync.WaitGroup
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -41,9 +44,13 @@ type Doris struct {
 
 var DeleteCondition = fmt.Sprintf("%s=1", DeleteColumn)
 
-func (ds *Doris) NewOutput(outputConfig interface{}) {
+func (ds *Doris) NewOutput(
+	outputConfig interface{},
+	rulesMap map[string]interface{},
+	inSchema schema.Schema,
+	outSchema schema.Schema) {
 	// init map obj
-	ds.tables = make(map[string]*Table)
+	ds.tables = make(map[string]*schema.Table)
 	ds.rulesMap = make(map[string]*rule.DorisRule)
 
 	ds.ctx, ds.cancel = context.WithCancel(context.Background())
@@ -60,13 +67,15 @@ func (ds *Doris) NewOutput(outputConfig interface{}) {
 	if err != nil {
 		log.Fatal("output config conn failed. err: ", err.Error())
 	}
-}
-
-func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[string]interface{}) {
-	if err := mapstructure.Decode(rulesMap, &ds.rulesMap); err != nil {
+	// init rulesMap
+	if err = mapstructure.Decode(rulesMap, &ds.rulesMap); err != nil {
 		log.Fatal(err)
 	}
+	ds.inSchema = inSchema
+	ds.outSchema = outSchema
+}
 
+func (ds *Doris) StartOutput(outputChan *channel.OutputChannel) {
 	ds.wg.Add(1)
 
 	ticker := time.NewTicker(time.Second * time.Duration(outputChan.FLushCHanMaxWaitSecond))
@@ -114,12 +123,12 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 				if !ok {
 					log.Fatalf("get ruleMap failed: %v", schemaTable)
 				}
-				tableObj, err := ds.GetTable(ruleMap.TargetSchema, ruleMap.TargetTable)
+				tableObj, err := ds.inSchema.GetTable(ruleMap.TargetSchema, ruleMap.TargetTable)
 				if err != nil {
 					log.Fatal(err)
 				}
 
-				err = ds.Execute(schemaTableEvents[schemaTable], tableObj)
+				err = ds.Execute(schemaTableEvents[schemaTable], tableObj, ruleMap.TargetSchema, ruleMap.TargetTable)
 				if err != nil {
 					log.Fatalf("do doris bulk err %v, close sync", err)
 					ds.cancel()
@@ -158,19 +167,19 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel, rulesMap map[str
 	}
 }
 
-func (ds *Doris) Execute(msgs []*msg.Msg, table *Table) error {
+func (ds *Doris) Execute(msgs []*msg.Msg, table *schema.Table, targetSchema string, targetTable string) error {
 	if len(msgs) == 0 {
 		return nil
 	}
 	var jsonList []string
 
 	jsonList = ds.generateJSON(msgs)
-	log.Debugf("doris bulk custom %s.%s row data num: %d", table.Schema, table.Name, len(jsonList))
+	log.Debugf("doris bulk custom %s.%s row data num: %d", targetSchema, targetTable, len(jsonList))
 	for _, s := range jsonList {
-		log.Debugf("doris custom %s.%s row data: %v", table.Schema, table.Name, s)
+		log.Debugf("doris custom %s.%s row data: %v", targetSchema, targetTable, s)
 	}
 	//TODO ignoreColumns handle
-	return ds.sendData(jsonList, table, nil)
+	return ds.sendData(jsonList, table, targetSchema, targetTable, nil)
 }
 
 func (ds *Doris) Close() {
@@ -235,7 +244,7 @@ func (ds *Doris) GetRules() interface{} {
 	return ds.rulesMap
 }
 
-func (ds *Doris) GetTable(db string, table string) (*Table, error) {
+func (ds *Doris) GetTable(db string, table string) (*schema.Table, error) {
 	key := fmt.Sprintf("%s.%s", db, table)
 	ds.tableLock.RLock()
 	t, ok := ds.tables[key]
@@ -248,14 +257,14 @@ func (ds *Doris) GetTable(db string, table string) (*Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	ta := &Table{
+	ta := &schema.Table{
 		Schema:  db,
 		Name:    table,
-		Columns: make([]string, 0, 16),
+		Columns: make([]schema.TableColumn, 0, 16),
 	}
 	for i := 0; i < r.RowNumber(); i++ {
 		name, _ := r.GetString(i, 0)
-		ta.Columns = append(ta.Columns, name)
+		ta.Columns = append(ta.Columns, schema.TableColumn{Name: name})
 	}
 	ds.tableLock.Lock()
 	ds.tables[key] = ta
@@ -295,7 +304,7 @@ func (ds *Doris) generateJSON(msgs []*msg.Msg) []string {
 	return jsonList
 }
 
-func (ds *Doris) sendData(content []string, table *Table, ignoreColumns []string) error {
+func (ds *Doris) sendData(content []string, table *schema.Table, targetSchema string, targetTable string, ignoreColumns []string) error {
 	cli := &http.Client{
 		/** CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			req.Header.Add("Authorization", "Basic "+sr.auth())
@@ -303,7 +312,7 @@ func (ds *Doris) sendData(content []string, table *Table, ignoreColumns []string
 		}, */
 	}
 	loadUrl := fmt.Sprintf("http://%s:%d/api/%s/%s/_stream_load",
-		ds.Host, ds.LoadPort, table.Schema, table.Name)
+		ds.Host, ds.LoadPort, targetSchema, targetTable)
 	newContent := `[` + strings.Join(content, ",") + `]`
 	req, _ := http.NewRequest("PUT", loadUrl, strings.NewReader(newContent))
 
@@ -318,10 +327,10 @@ func (ds *Doris) sendData(content []string, table *Table, ignoreColumns []string
 	req.Header.Add("delete", DeleteCondition)
 	var columnArray []string
 	for _, column := range table.Columns {
-		if ds.isContain(ignoreColumns, column) {
+		if ds.isContain(ignoreColumns, column.Name) {
 			continue
 		}
-		columnArray = append(columnArray, column)
+		columnArray = append(columnArray, column.Name)
 	}
 	columnArray = append(columnArray, DeleteColumn)
 	columns := fmt.Sprintf("%s", strings.Join(columnArray, ","))

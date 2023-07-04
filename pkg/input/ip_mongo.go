@@ -218,6 +218,7 @@ func (mi *MongoInputPlugin) onRow(e *streamObject) {
 func (mi *MongoInputPlugin) onRowCtl(e *streamObject) {
 	ctlMsg := &msg.Msg{
 		Type:                msg.MsgCtl,
+		PluginName:          msg.MongoPlugin,
 		InputContext:        &mongoInputContext{Id: e.Id},
 		AfterCommitCallback: mi.AfterMsgCommit,
 	}
@@ -232,6 +233,7 @@ func (mi *MongoInputPlugin) eventPreProcessing(e *streamObject) *msg.Msg {
 		DmlMsg:      &msg.DMLMsg{},
 		ResumeToken: e.Id,
 		Timestamp:   time.Unix(int64(e.ClusterTime.T), int64(0)),
+		PluginName:  msg.MongoPlugin,
 	}
 
 	switch e.OperationType {

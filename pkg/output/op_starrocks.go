@@ -13,6 +13,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/mitchellh/mapstructure"
 	"github.com/siddontang/go-log/log"
 	"io/ioutil"
@@ -25,7 +26,7 @@ import (
 type Starrocks struct {
 	*config.StarrocksConfig
 	tableLock     sync.RWMutex
-	tables        map[string]*Table
+	tables        map[string]*schema.Table
 	ruleLock      sync.RWMutex
 	rulesMap      map[string]*rule.StarrocksRule
 	lastCtlMsg    *msg.Msg
@@ -34,14 +35,20 @@ type Starrocks struct {
 	close         bool
 	connLock      sync.Mutex
 	conn          *client.Conn
+	inSchema      schema.Schema
+	outSchema     schema.Schema
 	wg            sync.WaitGroup
 	ctx           context.Context
 	cancel        context.CancelFunc
 }
 
-func (sr *Starrocks) NewOutput(outputConfig interface{}) {
+func (sr *Starrocks) NewOutput(
+	outputConfig interface{},
+	rulesMap map[string]interface{},
+	inSchema schema.Schema,
+	outSchema schema.Schema) {
 	// init map obj
-	sr.tables = make(map[string]*Table)
+	sr.tables = make(map[string]*schema.Table)
 	sr.rulesMap = make(map[string]*rule.StarrocksRule)
 
 	sr.ctx, sr.cancel = context.WithCancel(context.Background())
@@ -58,13 +65,15 @@ func (sr *Starrocks) NewOutput(outputConfig interface{}) {
 	if err != nil {
 		log.Fatal("output config conn failed. err: ", err.Error())
 	}
-}
-
-func (sr *Starrocks) StartOutput(outputChan *channel.OutputChannel, rulesMap map[string]interface{}) {
-	if err := mapstructure.Decode(rulesMap, &sr.rulesMap); err != nil {
+	// init rulesMap
+	if err = mapstructure.Decode(rulesMap, &sr.rulesMap); err != nil {
 		log.Fatal(err)
 	}
+	sr.inSchema = inSchema
+	sr.outSchema = outSchema
+}
 
+func (sr *Starrocks) StartOutput(outputChan *channel.OutputChannel) {
 	sr.wg.Add(1)
 
 	ticker := time.NewTicker(time.Second * time.Duration(outputChan.FLushCHanMaxWaitSecond))
@@ -112,12 +121,13 @@ func (sr *Starrocks) StartOutput(outputChan *channel.OutputChannel, rulesMap map
 				if !ok {
 					log.Fatalf("get ruleMap failed: %v", schemaTable)
 				}
-				tableObj, err := sr.GetTable(ruleMap.TargetSchema, ruleMap.TargetTable)
+				tableObj, err := sr.inSchema.GetTable(ruleMap.SourceSchema, ruleMap.SourceTable)
+				// tableObj, err := sr.GetTable(ruleMap.TargetSchema, ruleMap.TargetTable)
 				if err != nil {
 					log.Fatal(err)
 				}
 
-				err = sr.Execute(schemaTableEvents[schemaTable], tableObj)
+				err = sr.Execute(schemaTableEvents[schemaTable], tableObj, ruleMap.TargetSchema, ruleMap.TargetTable)
 				if err != nil {
 					log.Fatalf("do starrocks bulk err %v, close sync", err)
 					sr.cancel()
@@ -156,18 +166,18 @@ func (sr *Starrocks) StartOutput(outputChan *channel.OutputChannel, rulesMap map
 	}
 }
 
-func (sr *Starrocks) Execute(msgs []*msg.Msg, table *Table) error {
+func (sr *Starrocks) Execute(msgs []*msg.Msg, table *schema.Table, targetSchema string, targetTable string) error {
 	if len(msgs) == 0 {
 		return nil
 	}
 	var jsonList []string
 
 	jsonList = sr.generateJSON(msgs)
-	log.Debugf("starrocks bulk custom %s.%s row data num: %d", table.Schema, table.Name, len(jsonList))
+	log.Debugf("starrocks bulk custom %s.%s row data num: %d", targetSchema, targetTable, len(jsonList))
 	for _, s := range jsonList {
-		log.Debugf("starrocks custom %s.%s row data: %v", table.Schema, table.Name, s)
+		log.Debugf("starrocks custom %s.%s row data: %v", targetSchema, targetTable, s)
 	}
-	return sr.sendData(jsonList, table, nil)
+	return sr.sendData(jsonList, table, targetSchema, targetTable, nil)
 }
 
 func (sr *Starrocks) Close() {
@@ -232,7 +242,7 @@ func (sr *Starrocks) GetRules() interface{} {
 	return sr.rulesMap
 }
 
-func (sr *Starrocks) GetTable(db string, table string) (*Table, error) {
+func (sr *Starrocks) GetTable(db string, table string) (*schema.Table, error) {
 	key := fmt.Sprintf("%s.%s", db, table)
 	sr.tableLock.RLock()
 	t, ok := sr.tables[key]
@@ -244,14 +254,14 @@ func (sr *Starrocks) GetTable(db string, table string) (*Table, error) {
 	if err != nil {
 		return nil, err
 	}
-	ta := &Table{
+	ta := &schema.Table{
 		Schema:  db,
 		Name:    table,
-		Columns: make([]string, 0, 16),
+		Columns: make([]schema.TableColumn, 0, 16),
 	}
 	for i := 0; i < r.RowNumber(); i++ {
 		name, _ := r.GetString(i, 0)
-		ta.Columns = append(ta.Columns, name)
+		ta.Columns = append(ta.Columns, schema.TableColumn{Name: name})
 	}
 	sr.tableLock.Lock()
 	sr.tables[key] = ta
@@ -291,7 +301,7 @@ func (sr *Starrocks) generateJSON(msgs []*msg.Msg) []string {
 	return jsonList
 }
 
-func (sr *Starrocks) sendData(content []string, table *Table, ignoreColumns []string) error {
+func (sr *Starrocks) sendData(content []string, table *schema.Table, targetSchema string, targetTable string, ignoreColumns []string) error {
 	cli := &http.Client{
 		/** CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			req.Header.Add("Authorization", "Basic "+sr.auth())
@@ -299,7 +309,7 @@ func (sr *Starrocks) sendData(content []string, table *Table, ignoreColumns []st
 		}, */
 	}
 	loadUrl := fmt.Sprintf("http://%s:%d/api/%s/%s/_stream_load",
-		sr.Host, sr.LoadPort, table.Schema, table.Name)
+		sr.Host, sr.LoadPort, targetSchema, targetTable)
 	newContent := `[` + strings.Join(content, ",") + `]`
 	req, _ := http.NewRequest("PUT", loadUrl, strings.NewReader(newContent))
 
@@ -313,10 +323,10 @@ func (sr *Starrocks) sendData(content []string, table *Table, ignoreColumns []st
 
 	var columnArray []string
 	for _, column := range table.Columns {
-		if sr.isContain(ignoreColumns, column) {
+		if sr.isContain(ignoreColumns, column.Name) {
 			continue
 		}
-		columnArray = append(columnArray, column)
+		columnArray = append(columnArray, column.Name)
 	}
 	columnArray = append(columnArray, DeleteColumn)
 	columns := fmt.Sprintf("%s, __op = %s", strings.Join(columnArray, ","), DeleteColumn)

@@ -165,6 +165,7 @@ func (mi *MysqlInputPlugin) OnRow(e *canal.RowsEvent) error {
 func (mi *MysqlInputPlugin) OnPosSynced(pos mysql.Position, set mysql.GTIDSet, force bool) error {
 	ctlMsg := &msg.Msg{
 		Type:                msg.MsgCtl,
+		PluginName:          msg.MysqlPlugin,
 		InputContext:        &inputContext{BinlogName: pos.Name, BinlogPos: pos.Pos, BinlogGTID: set.String()},
 		AfterCommitCallback: mi.AfterMsgCommit,
 	}
@@ -182,11 +183,12 @@ func (mi *MysqlInputPlugin) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 			}
 			log.Debugf("msg event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, data)
 			msgs = append(msgs, &msg.Msg{
-				Table:     e.Table.Name,
-				Database:  e.Table.Schema,
-				Type:      msg.MsgDML,
-				DmlMsg:    &msg.DMLMsg{Action: msg.InsertAction, Data: data},
-				Timestamp: time.Unix(int64(e.Header.Timestamp), 0),
+				Table:      e.Table.Name,
+				Database:   e.Table.Schema,
+				Type:       msg.MsgDML,
+				DmlMsg:     &msg.DMLMsg{Action: msg.InsertAction, Data: data},
+				Timestamp:  time.Unix(int64(e.Header.Timestamp), 0),
+				PluginName: msg.MysqlPlugin,
 			})
 
 		}
@@ -205,11 +207,12 @@ func (mi *MysqlInputPlugin) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 			}
 			log.Debugf("msg event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, data)
 			msgs = append(msgs, &msg.Msg{
-				Table:     e.Table.Name,
-				Database:  e.Table.Schema,
-				Type:      msg.MsgDML,
-				DmlMsg:    &msg.DMLMsg{Action: msg.UpdateAction, Data: data},
-				Timestamp: time.Unix(int64(e.Header.Timestamp), 0),
+				Table:      e.Table.Name,
+				Database:   e.Table.Schema,
+				Type:       msg.MsgDML,
+				DmlMsg:     &msg.DMLMsg{Action: msg.UpdateAction, Data: data},
+				Timestamp:  time.Unix(int64(e.Header.Timestamp), 0),
+				PluginName: msg.MysqlPlugin,
 			})
 		}
 		return msgs
@@ -222,11 +225,12 @@ func (mi *MysqlInputPlugin) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 			}
 			log.Debugf("msg event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, data)
 			msgs = append(msgs, &msg.Msg{
-				Table:     e.Table.Name,
-				Database:  e.Table.Schema,
-				Type:      msg.MsgDML,
-				DmlMsg:    &msg.DMLMsg{Action: msg.DeleteAction, Data: data},
-				Timestamp: time.Unix(int64(e.Header.Timestamp), 0),
+				Table:      e.Table.Name,
+				Database:   e.Table.Schema,
+				Type:       msg.MsgDML,
+				DmlMsg:     &msg.DMLMsg{Action: msg.DeleteAction, Data: data},
+				Timestamp:  time.Unix(int64(e.Header.Timestamp), 0),
+				PluginName: msg.MysqlPlugin,
 			})
 
 		}

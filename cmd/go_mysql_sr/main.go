@@ -11,6 +11,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/output"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/position"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/utils"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sevlyar/go-daemon"
@@ -89,6 +90,8 @@ func main() {
 	var outputChan *channel.OutputChannel
 	var matcherFilter filter.MatcherFilter
 	var oo output.Plugin
+	var inSchema schema.Schema
+	var outSchema schema.Schema
 
 	// 初始化channel
 	syncChan = &channel.SyncChannel{}
@@ -104,16 +107,20 @@ func main() {
 		rr = &rule.DorisRules{}
 		// 初始化output插件实例
 		oo = &output.Doris{}
+		// init output schema
+		outSchema = &schema.DorisTables{}
 	case "starrocks":
 		otc = &config.StarrocksConfig{}
 		// 初始化rule配置
 		rr = &rule.StarrocksRules{}
 		// 初始化output插件实例
 		oo = &output.Starrocks{}
+		// init output schema
+		outSchema = &schema.StarrocksTables{}
 	}
 	otc.NewOutputTargetConfig(baseConfig.OutputConfig.Config)
+	outSchema.NewSchemaTables(baseConfig.OutputConfig.Config["target"])
 	rr.NewRule(baseConfig.OutputConfig.Config)
-	oo.NewOutput(otc)
 
 	// 初始化input插件配置
 	switch baseConfig.InputConfig.Type {
@@ -122,13 +129,20 @@ func main() {
 		// 初始化input插件实例
 		ip = &input.MysqlInputPlugin{}
 		pos = &position.MysqlPosition{}
+		// init input schema
+		inSchema = &schema.MysqlTables{}
 	case "mongo":
 		isc = &config.MongoConfig{}
 		// 初始化input插件实例
 		ip = &input.MongoInputPlugin{}
 		pos = &position.MongoPosition{}
+		// init input schema
+		inSchema = &schema.MongoTables{}
 	}
 	isc.NewInputSourceConfig(baseConfig.InputConfig.Config)
+	inSchema.NewSchemaTables(baseConfig.InputConfig.Config["source"])
+
+	oo.NewOutput(otc, rr.GetRuleToMap(), inSchema, outSchema)
 	ip.NewInput(isc, rr.GetRuleToRegex())
 	pos.LoadPosition(baseConfig)
 
@@ -140,9 +154,9 @@ func main() {
 	// 启动position
 	pos.StartPosition()
 	// 启动filter
-	matcherFilter.StartFilter(syncChan, outputChan)
+	matcherFilter.StartFilter(syncChan, outputChan, inSchema)
 	// 启动output插件
-	go oo.StartOutput(outputChan, rr.GetRuleToMap())
+	go oo.StartOutput(outputChan)
 
 	// api handle
 	http.HandleFunc("/api/addRule", api.AddRuleHandle(ip, oo))
@@ -160,6 +174,9 @@ func main() {
 		oo.Close()
 		// flush last position
 		pos.Close()
+		// close schema conn
+		inSchema.Close()
+		outSchema.Close()
 		log.Infof("[Main] is stopped.")
 	}
 }
