@@ -289,7 +289,7 @@ func (ds *Doris) generateJSON(msgs []*msg.Msg) []string {
 			b, _ := json.Marshal(event.DmlMsg.Data)
 			jsonList = append(jsonList, string(b))
 		default:
-			log.Fatalf("unhandled message type: %s", event)
+			log.Fatalf("unhandled message type: %v", event)
 		}
 	}
 	return jsonList
