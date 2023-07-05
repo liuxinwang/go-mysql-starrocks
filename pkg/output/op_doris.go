@@ -123,7 +123,7 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel) {
 				if !ok {
 					log.Fatalf("get ruleMap failed: %v", schemaTable)
 				}
-				tableObj, err := ds.inSchema.GetTable(ruleMap.TargetSchema, ruleMap.TargetTable)
+				tableObj, err := ds.inSchema.GetTable(ruleMap.SourceSchema, ruleMap.SourceTable)
 				if err != nil {
 					log.Fatal(err)
 				}
@@ -152,6 +152,7 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel) {
 				if err != nil {
 					log.Fatalf("ack msg failed: %v", errors.ErrorStack(err))
 				}
+				log.Debugf("after commit callback lastCtl: %v", ds.lastCtlMsg.InputContext)
 			} else {
 				log.Fatalf("not found AfterCommitCallback func")
 			}
