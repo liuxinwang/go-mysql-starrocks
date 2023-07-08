@@ -25,10 +25,10 @@ type MongoTables struct {
 	cancel     context.CancelFunc
 }
 
-func (mts *MongoTables) NewSchemaTables(conf interface{}) {
+func (mts *MongoTables) NewSchemaTables(conf *config.BaseConfig, pluginConfig interface{}) {
 	mts.tables = make(map[string]*Table)
 	mts.MongoConfig = &config.MongoConfig{}
-	err := mapstructure.Decode(conf, mts.MongoConfig)
+	err := mapstructure.Decode(pluginConfig, mts.MongoConfig)
 	if err != nil {
 		log.Fatal("new schema tables config parsing failed. err: %v", err.Error())
 	}
@@ -39,6 +39,7 @@ func (mts *MongoTables) NewSchemaTables(conf interface{}) {
 	if err != nil {
 		log.Fatal("new schema tables conn failed. err: ", err.Error())
 	}
+	// TODO LoadMeta
 }
 
 func (mts *MongoTables) AddTableForMsg(msg *msg.Msg) error {
@@ -76,6 +77,10 @@ func (mts *MongoTables) AddTableForMsg(msg *msg.Msg) error {
 
 func (mts *MongoTables) AddTable(db string, table string) (*Table, error) {
 	return nil, nil
+}
+
+func (mts *MongoTables) UpdateTable(db string, table string, args interface{}) (err error) {
+	return nil
 }
 
 func (mts *MongoTables) GetTable(db string, table string) (*Table, error) {

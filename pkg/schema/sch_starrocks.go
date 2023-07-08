@@ -20,10 +20,10 @@ type StarrocksTables struct {
 	conn       *client.Conn
 }
 
-func (sts *StarrocksTables) NewSchemaTables(conf interface{}) {
+func (sts *StarrocksTables) NewSchemaTables(conf *config.BaseConfig, pluginConfig interface{}) {
 	sts.tables = make(map[string]*Table)
 	sts.StarrocksConfig = &config.StarrocksConfig{}
-	err := mapstructure.Decode(conf, sts.StarrocksConfig)
+	err := mapstructure.Decode(pluginConfig, sts.StarrocksConfig)
 	if err != nil {
 		log.Fatalf("new schema tables config parsing failed. err: %v", err.Error())
 	}
@@ -32,6 +32,7 @@ func (sts *StarrocksTables) NewSchemaTables(conf interface{}) {
 	if err != nil {
 		log.Fatalf("new schema tables conn failed. err: ", err.Error())
 	}
+	// TODO LoadMeta
 }
 
 func (sts *StarrocksTables) AddTableForMsg(msg *msg.Msg) error {
@@ -61,6 +62,10 @@ func (sts *StarrocksTables) AddTable(db string, table string) (*Table, error) {
 	sts.tables[key] = ta
 	sts.tablesLock.Unlock()
 	return ta, nil
+}
+
+func (sts *StarrocksTables) UpdateTable(db string, table string, args interface{}) (err error) {
+	return nil
 }
 
 func (sts *StarrocksTables) GetTable(db string, table string) (*Table, error) {

@@ -42,11 +42,7 @@ type Starrocks struct {
 	cancel        context.CancelFunc
 }
 
-func (sr *Starrocks) NewOutput(
-	outputConfig interface{},
-	rulesMap map[string]interface{},
-	inSchema schema.Schema,
-	outSchema schema.Schema) {
+func (sr *Starrocks) NewOutput(outputConfig interface{}, rulesMap map[string]interface{}, inSchema schema.Schema, outSchema schema.Schema) {
 	// init map obj
 	sr.tables = make(map[string]*schema.Table)
 	sr.rulesMap = make(map[string]*rule.StarrocksRule)
@@ -342,7 +338,7 @@ func (sr *Starrocks) sendData(content []string, table *schema.Table, targetSchem
 		message := returnMap["Message"]
 		errorUrl := returnMap["ErrorURL"]
 		errorMsg := message.(string) +
-			fmt.Sprintf(", targetTable: %s.%s", table.Schema, table.Name) +
+			fmt.Sprintf(", targetTable: %s.%s", targetSchema, targetTable) +
 			fmt.Sprintf(", visit ErrorURL to view error details, ErrorURL: %s", errorUrl)
 		return errors.Trace(errors.New(errorMsg))
 	}

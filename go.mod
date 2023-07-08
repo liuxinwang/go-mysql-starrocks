@@ -8,7 +8,9 @@ require (
 	github.com/go-mysql-org/go-mysql v1.6.0
 	github.com/iancoleman/strcase v0.2.0
 	github.com/juju/errors v1.0.0
+	github.com/mitchellh/mapstructure v1.5.0
 	github.com/pingcap/errors v0.11.5-0.20210425183316-da1aaba5fb63
+	github.com/pingcap/parser v0.0.0-20210415081931-48e7f467fd74
 	github.com/prometheus/client_golang v1.15.1
 	github.com/sevlyar/go-daemon v0.1.6
 	github.com/siddontang/go v0.0.0-20180604090527-bdc77568d726
@@ -28,10 +30,8 @@ require (
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect
 	github.com/klauspost/compress v1.13.6 // indirect
 	github.com/matttproud/golang_protobuf_extensions v1.0.4 // indirect
-	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/montanaflynn/stats v0.0.0-20171201202039-1bf9dbcd8cbe // indirect
 	github.com/pingcap/log v0.0.0-20210625125904-98ed8e2eb1c7 // indirect
-	github.com/pingcap/parser v0.0.0-20210415081931-48e7f467fd74 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.42.0 // indirect

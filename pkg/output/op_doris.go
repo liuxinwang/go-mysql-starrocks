@@ -174,7 +174,7 @@ func (ds *Doris) Execute(msgs []*msg.Msg, table *schema.Table, targetSchema stri
 	}
 	var jsonList []string
 
-	jsonList = ds.generateJSON(msgs)
+	jsonList = ds.generateJSON(msgs, table)
 	log.Debugf("doris bulk custom %s.%s row data num: %d", targetSchema, targetTable, len(jsonList))
 	for _, s := range jsonList {
 		log.Debugf("doris custom %s.%s row data: %v", targetSchema, targetTable, s)
@@ -273,10 +273,16 @@ func (ds *Doris) GetTable(db string, table string) (*schema.Table, error) {
 	return ta, nil
 }
 
-func (ds *Doris) generateJSON(msgs []*msg.Msg) []string {
+func (ds *Doris) generateJSON(msgs []*msg.Msg, table *schema.Table) []string {
 	var jsonList []string
 
 	for _, event := range msgs {
+		// datetime 0000-00-00 00:00:00 write err handle
+		err := ds.datetimeHandle(event, table)
+		if err != nil {
+			log.Fatalf("datetime type handle failed: %v", err.Error())
+		}
+
 		switch event.DmlMsg.Action {
 		case msg.InsertAction:
 			// 增加虚拟列，标识操作类型 (stream load opType：UPSERT 0，DELETE：1)
@@ -346,7 +352,7 @@ func (ds *Doris) sendData(content []string, table *schema.Table, targetSchema st
 		message := returnMap["Message"]
 		errorUrl := returnMap["ErrorURL"]
 		errorMsg := message.(string) +
-			fmt.Sprintf(", targetTable: %s.%s", table.Schema, table.Name) +
+			fmt.Sprintf(", targetTable: %s.%s", targetSchema, targetTable) +
 			fmt.Sprintf(", visit ErrorURL to view error details, ErrorURL: %s", errorUrl)
 		return errors.Trace(errors.New(errorMsg))
 	}
@@ -444,4 +450,15 @@ func (ds *Doris) ExecuteSQL(cmd string, args ...interface{}) (rr *mysql.Result, 
 		}
 	}
 	return
+}
+
+func (ds *Doris) datetimeHandle(ev *msg.Msg, table *schema.Table) error {
+	for _, column := range table.Columns {
+		if column.Type == schema.TypeDatetime {
+			if ev.DmlMsg.Data[column.Name] == "0000-00-00 00:00:00" {
+				ev.DmlMsg.Data[column.Name] = "0000-01-01 00:00:00"
+			}
+		}
+	}
+	return nil
 }

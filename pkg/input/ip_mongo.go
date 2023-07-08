@@ -10,6 +10,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/position"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/mitchellh/mapstructure"
 	"github.com/siddontang/go-log/log"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -54,7 +55,7 @@ type NS struct {
 	Collection string `bson:"coll"`
 }
 
-func (mi *MongoInputPlugin) NewInput(inputConfig interface{}, ruleRegex []string) {
+func (mi *MongoInputPlugin) NewInput(inputConfig interface{}, ruleRegex []string, inSchema schema.Schema) {
 	mi.MongoConfig = &config.MongoConfig{}
 	err := mapstructure.Decode(inputConfig, mi.MongoConfig)
 	if err != nil {

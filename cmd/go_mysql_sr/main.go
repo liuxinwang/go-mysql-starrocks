@@ -119,7 +119,7 @@ func main() {
 		outSchema = &schema.StarrocksTables{}
 	}
 	otc.NewOutputTargetConfig(baseConfig.OutputConfig.Config)
-	outSchema.NewSchemaTables(baseConfig.OutputConfig.Config["target"])
+	outSchema.NewSchemaTables(baseConfig, baseConfig.OutputConfig.Config["target"])
 	rr.NewRule(baseConfig.OutputConfig.Config)
 
 	// 初始化input插件配置
@@ -140,10 +140,10 @@ func main() {
 		inSchema = &schema.MongoTables{}
 	}
 	isc.NewInputSourceConfig(baseConfig.InputConfig.Config)
-	inSchema.NewSchemaTables(baseConfig.InputConfig.Config["source"])
+	inSchema.NewSchemaTables(baseConfig, baseConfig.InputConfig.Config["source"])
 
 	oo.NewOutput(otc, rr.GetRuleToMap(), inSchema, outSchema)
-	ip.NewInput(isc, rr.GetRuleToRegex())
+	ip.NewInput(isc, rr.GetRuleToRegex(), inSchema)
 	pos.LoadPosition(baseConfig)
 
 	// 初始化filter配置

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"github.com/go-mysql-org/go-mysql/canal"
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/go-mysql-org/go-mysql/schema"
 	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/channel"
@@ -13,7 +14,10 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/position"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
+	schema2 "github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/mitchellh/mapstructure"
+	"github.com/pingcap/parser"
+	"github.com/pingcap/parser/ast"
 	"github.com/siddontang/go-log/log"
 	"regexp"
 	"sync"
@@ -23,22 +27,27 @@ import (
 type MysqlInputPlugin struct {
 	canal.DummyEventHandler
 	*config.MysqlConfig
-	canalConfig *canal.Config
-	syncChan    *channel.SyncChannel
-	canal       *canal.Canal
-	position    position.Position
-	wg          sync.WaitGroup
-	ctx         context.Context
-	cancel      context.CancelFunc
+	canalConfig         *canal.Config
+	syncChan            *channel.SyncChannel
+	canal               *canal.Canal
+	position            position.Position
+	inSchema            schema2.Schema
+	parser              *parser.Parser
+	syncPosition        *position.MysqlBasePosition
+	ctlMsgFlushPosition *position.MysqlBasePosition // only ddl before handle
+	wg                  sync.WaitGroup
+	ctx                 context.Context
+	cancel              context.CancelFunc
 }
 
 type inputContext struct {
 	BinlogName string `toml:"binlog-name"`
 	BinlogPos  uint32 `toml:"binlog-pos"`
 	BinlogGTID string `toml:"binlog-gtid"`
+	force      bool
 }
 
-func (mi *MysqlInputPlugin) NewInput(inputConfig interface{}, ruleRegex []string) {
+func (mi *MysqlInputPlugin) NewInput(inputConfig interface{}, ruleRegex []string, inSchema schema2.Schema) {
 	mi.MysqlConfig = &config.MysqlConfig{}
 	err := mapstructure.Decode(inputConfig, mi.MysqlConfig)
 	if err != nil {
@@ -54,6 +63,9 @@ func (mi *MysqlInputPlugin) NewInput(inputConfig interface{}, ruleRegex []string
 	cfg.IncludeTableRegex = ruleRegex
 	// cfg.Logger = &log.Logger{}
 	mi.canalConfig = cfg
+	mi.inSchema = inSchema
+	mi.parser = parser.New()
+	mi.ctlMsgFlushPosition = &position.MysqlBasePosition{BinlogName: "", BinlogPos: 0, BinlogGTID: ""}
 }
 
 func (mi *MysqlInputPlugin) StartInput(pos position.Position, syncChan *channel.SyncChannel) position.Position {
@@ -95,6 +107,7 @@ func (mi *MysqlInputPlugin) StartInput(pos position.Position, syncChan *channel.
 	// assign value
 	mi.syncChan = syncChan
 	mi.position = mysqlPos
+	mi.syncPosition = &position.MysqlBasePosition{BinlogName: mysqlPos.BinlogName, BinlogPos: mysqlPos.BinlogPos, BinlogGTID: mysqlPos.BinlogGTID}
 
 	// Start canal
 	go func() {
@@ -162,14 +175,60 @@ func (mi *MysqlInputPlugin) OnRow(e *canal.RowsEvent) error {
 	return nil
 }
 
+func (mi *MysqlInputPlugin) OnTableChanged(schema string, table string) error {
+
+	// onDDL before
+	// send flush data msg
+	// mi.syncChan.SyncChan <- ctlMsg
+	ctlMsg := &msg.Msg{
+		Type:       msg.MsgCtl,
+		PluginName: msg.MysqlPlugin,
+		InputContext: &inputContext{ // last sync position
+			BinlogName: mi.syncPosition.BinlogName,
+			BinlogPos:  mi.syncPosition.BinlogPos,
+			BinlogGTID: mi.syncPosition.BinlogGTID,
+			force:      true},
+		AfterCommitCallback: mi.AfterMsgCommit,
+	}
+	mi.syncChan.SyncChan <- ctlMsg
+
+	// waiting flush data msgs...
+	// if syncPosition gitd == ctlMsgFlushPosition gitd indicates that flush is complete
+	for true {
+		if mi.ctlMsgFlushPosition.BinlogGTID != "" {
+			if mi.syncPosition.BinlogGTID == mi.ctlMsgFlushPosition.BinlogGTID {
+				break
+			}
+		}
+		time.Sleep(time.Second * 1)
+	}
+	return nil
+}
+
 func (mi *MysqlInputPlugin) OnPosSynced(pos mysql.Position, set mysql.GTIDSet, force bool) error {
 	ctlMsg := &msg.Msg{
 		Type:                msg.MsgCtl,
 		PluginName:          msg.MysqlPlugin,
-		InputContext:        &inputContext{BinlogName: pos.Name, BinlogPos: pos.Pos, BinlogGTID: set.String()},
+		InputContext:        &inputContext{BinlogName: pos.Name, BinlogPos: pos.Pos, BinlogGTID: set.String(), force: false},
 		AfterCommitCallback: mi.AfterMsgCommit,
 	}
 	mi.syncChan.SyncChan <- ctlMsg
+	mi.syncPosition.BinlogName = pos.Name
+	mi.syncPosition.BinlogPos = pos.Pos
+	mi.syncPosition.BinlogGTID = set.String()
+	return nil
+}
+
+func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replication.QueryEvent) error {
+	log.Infof("ddl event: %v", string(queryEvent.Query))
+
+	stmts, _, err := mi.parser.Parse(string(queryEvent.Query), "", "")
+	if err != nil {
+		log.Fatalf("parse query(%s) err %v", queryEvent.Query, err)
+	}
+	for _, stmt := range stmts {
+		mi.parseStmt(stmt, string(queryEvent.Schema))
+	}
 	return nil
 }
 
@@ -178,9 +237,32 @@ func (mi *MysqlInputPlugin) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 	if e.Action == canal.InsertAction {
 		for _, row := range e.Rows {
 			data := make(map[string]interface{})
-			for j := 0; j < len(e.Table.Columns); j++ {
-				data[e.Table.Columns[j].Name] = deserialize(row[j], e.Table.Columns[j])
+
+			if len(row) != len(e.Table.Columns) {
+				columns := make([]string, 0, 16)
+				for _, column := range e.Table.Columns {
+					columns = append(columns, column.Name)
+				}
+				log.Warnf("insert %s.%s columns and data mismatch in length: %d vs %d, table %v",
+					e.Table.Schema, e.Table.Name, len(e.Table.Columns), len(row), columns)
+				log.Infof("load table:%s.%s meta columns from local", e.Table.Schema, e.Table.Name)
+				ta, err := mi.inSchema.GetTable(e.Table.Schema, e.Table.Name)
+				if err != nil {
+					log.Fatalf("get tables failed, err: %v", err.Error())
+				}
+				if len(row) != len(ta.Columns) {
+					log.Warnf("insert %s.%s columns and data mismatch in local length: %d vs %d, table %v",
+						e.Table.Schema, e.Table.Name, len(ta.Columns), len(row), ta.GetTableColumnsName())
+				}
+				for j := 0; j < len(row); j++ {
+					data[ta.Columns[j].Name] = deserializeForLocal(row[j], ta.Columns[j])
+				}
+			} else {
+				for j := 0; j < len(row); j++ {
+					data[e.Table.Columns[j].Name] = deserialize(row[j], e.Table.Columns[j])
+				}
 			}
+
 			log.Debugf("msg event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, data)
 			msgs = append(msgs, &msg.Msg{
 				Table:      e.Table.Name,
@@ -201,10 +283,34 @@ func (mi *MysqlInputPlugin) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 			}
 			data := make(map[string]interface{})
 			old := make(map[string]interface{})
-			for j := 0; j < len(e.Table.Columns); j++ {
-				data[e.Table.Columns[j].Name] = deserialize(row[j], e.Table.Columns[j])
-				old[e.Table.Columns[j].Name] = deserialize(e.Rows[i-1][j], e.Table.Columns[j])
+
+			if len(row) != len(e.Table.Columns) {
+				columns := make([]string, 0, 16)
+				for _, column := range e.Table.Columns {
+					columns = append(columns, column.Name)
+				}
+				log.Warnf("update %s.%s columns and data mismatch in length: %d vs %d, table %v",
+					e.Table.Schema, e.Table.Name, len(e.Table.Columns), len(row), columns)
+				log.Infof("load table:%s.%s meta columns from local", e.Table.Schema, e.Table.Name)
+				ta, err := mi.inSchema.GetTable(e.Table.Schema, e.Table.Name)
+				if err != nil {
+					log.Fatalf("get tables failed, err: %v", err.Error())
+				}
+				if len(row) != len(ta.Columns) {
+					log.Warnf("update %s.%s columns and data mismatch in local length: %d vs %d, table %v",
+						e.Table.Schema, e.Table.Name, len(ta.Columns), len(row), ta.GetTableColumnsName())
+				}
+				for j := 0; j < len(row); j++ {
+					data[ta.Columns[j].Name] = deserializeForLocal(row[j], ta.Columns[j])
+					old[ta.Columns[j].Name] = deserializeForLocal(e.Rows[i-1][j], ta.Columns[j])
+				}
+			} else {
+				for j := 0; j < len(row); j++ {
+					data[e.Table.Columns[j].Name] = deserialize(row[j], e.Table.Columns[j])
+					old[e.Table.Columns[j].Name] = deserialize(e.Rows[i-1][j], e.Table.Columns[j])
+				}
 			}
+
 			log.Debugf("msg event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, data)
 			msgs = append(msgs, &msg.Msg{
 				Table:      e.Table.Name,
@@ -220,9 +326,28 @@ func (mi *MysqlInputPlugin) eventPreProcessing(e *canal.RowsEvent) []*msg.Msg {
 	if e.Action == canal.DeleteAction {
 		for _, row := range e.Rows {
 			data := make(map[string]interface{})
-			for j := 0; j < len(e.Table.Columns); j++ {
-				data[e.Table.Columns[j].Name] = deserialize(row[j], e.Table.Columns[j])
+
+			if len(row) != len(e.Table.Columns) {
+				log.Warnf("delete %s.%s columns and data mismatch in length: %d vs %d",
+					e.Table.Schema, e.Table.Name, len(e.Table.Columns), len(row))
+				log.Infof("load table:%s.%s meta columns from local", e.Table.Schema, e.Table.Name)
+				ta, err := mi.inSchema.GetTable(e.Table.Schema, e.Table.Name)
+				if err != nil {
+					log.Fatalf("get tables failed, err: %v", err.Error())
+				}
+				if len(row) != len(ta.Columns) {
+					log.Warnf("delete %s.%s columns and data mismatch in local length: %d vs %d, table %v",
+						e.Table.Schema, e.Table.Name, len(ta.Columns), len(row), ta.GetTableColumnsName())
+				}
+				for j := 0; j < len(row); j++ {
+					data[ta.Columns[j].Name] = deserializeForLocal(row[j], ta.Columns[j])
+				}
+			} else {
+				for j := 0; j < len(row); j++ {
+					data[e.Table.Columns[j].Name] = deserialize(row[j], e.Table.Columns[j])
+				}
 			}
+
 			log.Debugf("msg event: %s %s.%s %v\n", e.Action, e.Table.Schema, e.Table.Name, data)
 			msgs = append(msgs, &msg.Msg{
 				Table:      e.Table.Name,
@@ -246,6 +371,17 @@ func (mi *MysqlInputPlugin) AfterMsgCommit(msg *msg.Msg) error {
 		if err := mi.position.ModifyPosition(ctx.BinlogGTID); err != nil {
 			return errors.Trace(err)
 		}
+		if ctx.force {
+			// flush position
+			if err := mi.position.SavePosition(); err != nil {
+				log.Fatalf("msg event position save failed: %v", errors.ErrorStack(err))
+			}
+			mi.ctlMsgFlushPosition.BinlogName = ctx.BinlogName
+			mi.ctlMsgFlushPosition.BinlogPos = ctx.BinlogPos
+			mi.ctlMsgFlushPosition.BinlogGTID = ctx.BinlogGTID
+		}
+	} else {
+		log.Warnf("after msg commit binlog gtid is empty, no modify position! msg: %v", msg.InputContext)
 	}
 
 	return nil
@@ -283,4 +419,80 @@ func deserialize(raw interface{}, column schema.TableColumn) interface{} {
 		}
 	}
 	return ret
+}
+
+func deserializeForLocal(raw interface{}, column schema2.TableColumn) interface{} {
+	if raw == nil {
+		return nil
+	}
+
+	ret := raw
+	if column.RawType == "text" || column.RawType == "json" {
+		_, ok := raw.([]uint8)
+		if ok {
+			ret = string(raw.([]uint8))
+		}
+	}
+	return ret
+}
+
+type node struct {
+	db    string
+	table string
+}
+
+func (mi *MysqlInputPlugin) parseStmt(stmt ast.StmtNode, db string) (ns []*node) {
+	switch t := stmt.(type) {
+	case *ast.RenameTableStmt:
+		for _, tableInfo := range t.TableToTables {
+			n := &node{
+				db:    tableInfo.OldTable.Schema.String(),
+				table: tableInfo.OldTable.Name.String(),
+			}
+			ns = append(ns, n)
+		}
+	case *ast.AlterTableStmt:
+		n := &node{
+			db:    t.Table.Schema.String(),
+			table: t.Table.Name.String(),
+		}
+		if t.Table.Schema.String() == "" {
+			n.db = db
+		}
+		ns = []*node{n}
+
+		for _, spec := range t.Specs {
+			err := mi.inSchema.UpdateTable(n.db, n.table, spec)
+			if err != nil {
+				log.Fatalf("ddl alter event update table meta failed, err: %v", err.Error())
+			}
+		}
+	case *ast.DropTableStmt:
+		for _, table := range t.Tables {
+			n := &node{
+				db:    table.Schema.String(),
+				table: table.Name.String(),
+			}
+			ns = append(ns, n)
+		}
+	case *ast.CreateTableStmt:
+		n := &node{
+			db:    t.Table.Schema.String(),
+			table: t.Table.Name.String(),
+		}
+		// TODO
+		hah := t.Cols
+		println(&hah)
+		for _, col := range t.Cols {
+			println(col.Name.String())
+		}
+		ns = []*node{n}
+	case *ast.TruncateTableStmt:
+		n := &node{
+			db:    t.Table.Schema.String(),
+			table: t.Table.Name.String(),
+		}
+		ns = []*node{n}
+	}
+	return ns
 }

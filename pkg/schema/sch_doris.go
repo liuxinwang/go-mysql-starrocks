@@ -20,10 +20,10 @@ type DorisTables struct {
 	conn       *client.Conn
 }
 
-func (dts *DorisTables) NewSchemaTables(conf interface{}) {
+func (dts *DorisTables) NewSchemaTables(conf *config.BaseConfig, pluginConfig interface{}) {
 	dts.tables = make(map[string]*Table)
 	dts.DorisConfig = &config.DorisConfig{}
-	err := mapstructure.Decode(conf, dts.DorisConfig)
+	err := mapstructure.Decode(pluginConfig, dts.DorisConfig)
 	if err != nil {
 		log.Fatalf("new schema tables config parsing failed. err: %v", err.Error())
 	}
@@ -32,6 +32,7 @@ func (dts *DorisTables) NewSchemaTables(conf interface{}) {
 	if err != nil {
 		log.Fatalf("new schema tables conn failed. err: ", err.Error())
 	}
+	// TODO LoadMeta
 }
 
 func (dts *DorisTables) AddTableForMsg(msg *msg.Msg) error {
@@ -61,6 +62,10 @@ func (dts *DorisTables) AddTable(db string, table string) (*Table, error) {
 	dts.tables[key] = ta
 	dts.tablesLock.Unlock()
 	return ta, nil
+}
+
+func (dts *DorisTables) UpdateTable(db string, table string, args interface{}) (err error) {
+	return nil
 }
 
 func (dts *DorisTables) GetTable(db string, table string) (*Table, error) {
