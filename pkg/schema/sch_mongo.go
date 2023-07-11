@@ -125,3 +125,7 @@ func (mts *MongoTables) unionColumns(cacheTable *Table, msgTable *Table) {
 		}
 	}
 }
+
+func (mts *MongoTables) SaveMeta() error {
+	return nil
+}

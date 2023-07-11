@@ -97,6 +97,86 @@ func (mts *MysqlTables) UpdateTable(db string, table string, spec interface{}) (
 		return err
 	}
 	switch alterSpec.Tp {
+	case ast.AlterTableDropColumn:
+		oldColumnName := alterSpec.OldColumnName.Name.String()
+		if err = t.DelColumn(oldColumnName); err != nil {
+			log.Warnf("%v", err.Error())
+		}
+		err = mts.SaveMeta()
+		if err != nil {
+			return err
+		}
+	case ast.AlterTableChangeColumn:
+		oldColumnName := alterSpec.OldColumnName.Name.String()
+		if err = t.DelColumn(oldColumnName); err != nil {
+			log.Warnf("%v", err.Error())
+		}
+		for _, newColumn := range alterSpec.NewColumns {
+			switch alterSpec.Position.Tp {
+			case ast.ColumnPositionNone:
+				rawType := newColumn.Tp.String()
+				columnType := mts.GetColumnTypeFromRawType(rawType)
+				tableColumn := &TableColumn{Name: newColumn.Name.String(), Type: columnType, RawType: rawType}
+				mts.tablesLock.Lock()
+				t.Columns = append(t.Columns, *tableColumn)
+				mts.tablesLock.Unlock()
+			case ast.ColumnPositionFirst:
+				// TODO
+			case ast.ColumnPositionAfter:
+				afterColumnName := alterSpec.Position.RelativeColumn.Name.String()
+				for i, oldColumn := range t.Columns {
+					if oldColumn.Name == afterColumnName {
+						rawType := newColumn.Tp.String()
+						columnType := mts.GetColumnTypeFromRawType(rawType)
+						newTableColumn := TableColumn{Name: newColumn.Name.String(), Type: columnType, RawType: rawType}
+						mts.tablesLock.Lock()
+						t.Columns = append(t.Columns[:i+1], append([]TableColumn{newTableColumn}, t.Columns[i+1:]...)...)
+						mts.tablesLock.Unlock()
+						break
+					}
+				}
+
+			}
+		}
+		err = mts.SaveMeta()
+		if err != nil {
+			return err
+		}
+	case ast.AlterTableModifyColumn:
+		for _, newColumn := range alterSpec.NewColumns {
+			if err = t.DelColumn(newColumn.Name.String()); err != nil {
+				log.Warnf("%v", err.Error())
+			}
+			switch alterSpec.Position.Tp {
+			case ast.ColumnPositionNone:
+				rawType := newColumn.Tp.String()
+				columnType := mts.GetColumnTypeFromRawType(rawType)
+				tableColumn := &TableColumn{Name: newColumn.Name.String(), Type: columnType, RawType: rawType}
+				mts.tablesLock.Lock()
+				t.Columns = append(t.Columns, *tableColumn)
+				mts.tablesLock.Unlock()
+			case ast.ColumnPositionFirst:
+				// TODO
+			case ast.ColumnPositionAfter:
+				afterColumnName := alterSpec.Position.RelativeColumn.Name.String()
+				for i, oldColumn := range t.Columns {
+					if oldColumn.Name == afterColumnName {
+						rawType := newColumn.Tp.String()
+						columnType := mts.GetColumnTypeFromRawType(rawType)
+						newTableColumn := TableColumn{Name: newColumn.Name.String(), Type: columnType, RawType: rawType}
+						mts.tablesLock.Lock()
+						t.Columns = append(t.Columns[:i+1], append([]TableColumn{newTableColumn}, t.Columns[i+1:]...)...)
+						mts.tablesLock.Unlock()
+						break
+					}
+				}
+
+			}
+		}
+		err = mts.SaveMeta()
+		if err != nil {
+			return err
+		}
 	case ast.AlterTableAddColumns:
 		for _, newColumn := range alterSpec.NewColumns {
 			// fix stop main column is added done

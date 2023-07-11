@@ -126,3 +126,7 @@ func (sts *StarrocksTables) ExecuteSQL(cmd string, args ...interface{}) (rr *mys
 	}
 	return
 }
+
+func (sts *StarrocksTables) SaveMeta() error {
+	return nil
+}

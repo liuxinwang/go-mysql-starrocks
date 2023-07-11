@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 )
@@ -12,6 +13,7 @@ type Schema interface {
 	UpdateTable(db string, table string, args interface{}) error
 	GetTable(db string, table string) (*Table, error)
 	RefreshTable(db string, table string)
+	SaveMeta() error
 	Close()
 }
 
@@ -60,4 +62,13 @@ func (t *Table) FindColumn(name string) int {
 		}
 	}
 	return -1
+}
+
+func (t *Table) DelColumn(name string) error {
+	colIndex := t.FindColumn(name)
+	if colIndex > -1 {
+		t.Columns = append(t.Columns[:colIndex], t.Columns[colIndex+1:]...)
+		return nil
+	}
+	return errors.New("column: %s not found")
 }

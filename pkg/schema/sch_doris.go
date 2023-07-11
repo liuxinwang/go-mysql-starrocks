@@ -126,3 +126,7 @@ func (dts *DorisTables) ExecuteSQL(cmd string, args ...interface{}) (rr *mysql.R
 	}
 	return
 }
+
+func (dts *DorisTables) SaveMeta() error {
+	return nil
+}
