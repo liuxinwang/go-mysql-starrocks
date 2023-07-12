@@ -483,12 +483,12 @@ func (mi *MysqlInputPlugin) parseStmt(stmt ast.StmtNode, db string) (ns []*node)
 		if t.Table.Schema.String() == "" {
 			n.db = db
 		}
-		// TODO
-		_, err := mi.inSchema.AddTable(n.db, n.table)
+		err := mi.inSchema.AddCreateTable(n.db, n.table, t.Cols)
 		if err != nil {
 			log.Fatalf("ddl alter event add table meta failed, err: %v", err.Error())
 		}
-		if err = mi.inSchema.SaveMeta(); err != nil {
+
+		if err := mi.inSchema.SaveMeta(); err != nil {
 			log.Fatalf("save tables meta failed. err: %v", err.Error())
 		}
 		ns = []*node{n}

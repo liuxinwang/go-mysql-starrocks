@@ -64,6 +64,10 @@ func (sts *StarrocksTables) AddTable(db string, table string) (*Table, error) {
 	return ta, nil
 }
 
+func (sts *StarrocksTables) AddCreateTable(db string, table string, cols interface{}) error {
+	return nil
+}
+
 func (sts *StarrocksTables) UpdateTable(db string, table string, args interface{}) (err error) {
 	return nil
 }

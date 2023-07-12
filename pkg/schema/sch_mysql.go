@@ -86,6 +86,35 @@ func (mts *MysqlTables) AddTable(db string, table string) (*Table, error) {
 	return ta, nil
 }
 
+func (mts *MysqlTables) AddCreateTable(db string, table string, cols interface{}) error {
+	columnsDef := make([]*ast.ColumnDef, 0, 2)
+	err := mapstructure.Decode(cols, &columnsDef)
+	if err != nil {
+		return err
+	}
+
+	key := fmt.Sprintf("%s.%s", db, table)
+	ta := &Table{
+		Schema:  db,
+		Name:    table,
+		Columns: make([]TableColumn, 0, 16),
+	}
+	for _, colDef := range columnsDef {
+		rawType := colDef.Tp.String()
+		var column = TableColumn{Name: colDef.Name.String(), RawType: rawType}
+		column.Type = mts.GetColumnTypeFromRawType(rawType)
+		ta.Columns = append(ta.Columns, column)
+	}
+	mts.tablesLock.Lock()
+	mts.tables[key] = ta
+	mts.tablesLock.Unlock()
+	err = mts.SaveMeta()
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (mts *MysqlTables) UpdateTable(db string, table string, spec interface{}) (err error) {
 	key := fmt.Sprintf("%s.%s", db, table)
 	mts.tablesLock.RLock()

@@ -64,6 +64,10 @@ func (dts *DorisTables) AddTable(db string, table string) (*Table, error) {
 	return ta, nil
 }
 
+func (dts *DorisTables) AddCreateTable(db string, table string, cols interface{}) error {
+	return nil
+}
+
 func (dts *DorisTables) UpdateTable(db string, table string, args interface{}) (err error) {
 	return nil
 }

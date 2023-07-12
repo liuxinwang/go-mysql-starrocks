@@ -10,6 +10,7 @@ type Schema interface {
 	NewSchemaTables(config *config.BaseConfig, pluginConfig interface{})
 	AddTableForMsg(msg *msg.Msg) error
 	AddTable(db string, table string) (*Table, error)
+	AddCreateTable(db string, table string, args interface{}) error
 	UpdateTable(db string, table string, args interface{}) error
 	GetTable(db string, table string) (*Table, error)
 	RefreshTable(db string, table string)
