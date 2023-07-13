@@ -108,6 +108,7 @@ func (mts *MysqlTables) AddCreateTable(db string, table string, cols interface{}
 	mts.tablesLock.Lock()
 	mts.tables[key] = ta
 	mts.tablesLock.Unlock()
+	log.Infof("create table: %s.%s, %v", ta.Schema, ta.Name, *ta)
 	err = mts.SaveMeta()
 	if err != nil {
 		return err
@@ -148,6 +149,7 @@ func (mts *MysqlTables) UpdateTable(db string, table string, spec interface{}) (
 				tableColumn := &TableColumn{Name: newColumn.Name.String(), Type: columnType, RawType: rawType}
 				mts.tablesLock.Lock()
 				t.Columns = append(t.Columns, *tableColumn)
+				log.Infof("table: %s.%s change column: %v", t.Schema, t.Name, *tableColumn)
 				mts.tablesLock.Unlock()
 			case ast.ColumnPositionFirst:
 				// TODO
@@ -161,6 +163,7 @@ func (mts *MysqlTables) UpdateTable(db string, table string, spec interface{}) (
 						mts.tablesLock.Lock()
 						t.Columns = append(t.Columns[:i+1], append([]TableColumn{newTableColumn}, t.Columns[i+1:]...)...)
 						mts.tablesLock.Unlock()
+						log.Infof("table: %s.%s change column: %v", t.Schema, t.Name, newTableColumn)
 						break
 					}
 				}
@@ -183,6 +186,7 @@ func (mts *MysqlTables) UpdateTable(db string, table string, spec interface{}) (
 				tableColumn := &TableColumn{Name: newColumn.Name.String(), Type: columnType, RawType: rawType}
 				mts.tablesLock.Lock()
 				t.Columns = append(t.Columns, *tableColumn)
+				log.Infof("table: %s.%s modify column: %v", t.Schema, t.Name, *tableColumn)
 				mts.tablesLock.Unlock()
 			case ast.ColumnPositionFirst:
 				// TODO
@@ -196,6 +200,7 @@ func (mts *MysqlTables) UpdateTable(db string, table string, spec interface{}) (
 						mts.tablesLock.Lock()
 						t.Columns = append(t.Columns[:i+1], append([]TableColumn{newTableColumn}, t.Columns[i+1:]...)...)
 						mts.tablesLock.Unlock()
+						log.Infof("table: %s.%s modify column: %v", t.Schema, t.Name, newTableColumn)
 						break
 					}
 				}
@@ -220,6 +225,7 @@ func (mts *MysqlTables) UpdateTable(db string, table string, spec interface{}) (
 				mts.tablesLock.Lock()
 				t.Columns = append(t.Columns, *tableColumn)
 				mts.tablesLock.Unlock()
+				log.Infof("table: %s.%s add column: %v", t.Schema, t.Name, *tableColumn)
 			case ast.ColumnPositionFirst:
 				// TODO
 			case ast.ColumnPositionAfter:
@@ -232,6 +238,7 @@ func (mts *MysqlTables) UpdateTable(db string, table string, spec interface{}) (
 						mts.tablesLock.Lock()
 						t.Columns = append(t.Columns[:i+1], append([]TableColumn{newTableColumn}, t.Columns[i+1:]...)...)
 						mts.tablesLock.Unlock()
+						log.Infof("table: %s.%s add column: %v", t.Schema, t.Name, newTableColumn)
 						break
 					}
 				}
@@ -370,7 +377,8 @@ func (mts *MysqlTables) SaveMeta() error {
 	if err = ioutil2.WriteFileAtomic(mts.FilePath, buf.Bytes(), 0644); err != nil {
 		log.Errorf("save tables meta to file %s err %v", mts.FilePath, err)
 	}
-	log.Debugf("flush tables meta to file: %s", mts.tables)
+	log.Debugf("flush tables meta detail: %s", mts.tables)
+	log.Infof("flush tables meta to file: %s", mts.FilePath)
 	return errors.Trace(err)
 }
 

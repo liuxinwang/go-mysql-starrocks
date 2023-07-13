@@ -1,6 +1,9 @@
 package msg
 
-import "time"
+import (
+	"github.com/pingcap/parser/ast"
+	"time"
+)
 
 type MsgType string
 type ActionType string
@@ -40,6 +43,8 @@ type DMLMsg struct {
 }
 
 type DDLMsg struct {
+	Statement string
+	AST       ast.StmtNode
 }
 
 type WatchId struct {

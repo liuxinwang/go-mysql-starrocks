@@ -228,6 +228,8 @@ func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replicatio
 	}
 	for _, stmt := range stmts {
 		mi.parseStmt(stmt, string(queryEvent.Schema))
+		// send ddl event
+
 	}
 	return nil
 }

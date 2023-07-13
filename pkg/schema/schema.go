@@ -4,6 +4,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
+	"github.com/siddontang/go-log/log"
 )
 
 type Schema interface {
@@ -69,6 +70,7 @@ func (t *Table) DelColumn(name string) error {
 	colIndex := t.FindColumn(name)
 	if colIndex > -1 {
 		t.Columns = append(t.Columns[:colIndex], t.Columns[colIndex+1:]...)
+		log.Infof("table: %s.%s delete column: %s", t.Schema, t.Name, name)
 		return nil
 	}
 	return errors.New("column: %s not found")

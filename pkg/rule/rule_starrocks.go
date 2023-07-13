@@ -16,9 +16,9 @@ type StarrocksRule struct {
 	SourceTable  string   `toml:"source-table" json:"source-table" mapstructure:"source-table"`
 	TargetSchema string   `toml:"target-schema" json:"target-schema" mapstructure:"target-schema"`
 	TargetTable  string   `toml:"target-table" json:"target-table" mapstructure:"target-table"`
-	RuleType     RuleType `default:"init"` // init、dynamic add
+	RuleType     RuleType `default:"init" json:"rule-type"` // init、dynamic add
 	// for api delete rule, only logical deleted, fix output get ruleMap failed problem. when add the same rule physical deleted
-	Deleted bool `default:"false"`
+	Deleted bool `default:"false" json:"deleted"`
 }
 
 func (srs *StarrocksRules) NewRule(config map[string]interface{}) {
