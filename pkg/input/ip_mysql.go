@@ -79,7 +79,7 @@ func (mi *MysqlInputPlugin) StartInput(pos position.Position, syncChan *channel.
 	// Register a handler to handle RowsEvent
 	c.SetEventHandler(mi)
 
-	var mysqlPos = &position.MysqlPosition{}
+	var mysqlPos = &position.MysqlPositionV2{}
 	if err := mapstructure.Decode(pos, mysqlPos); err != nil {
 		log.Fatalf("mysql position parsing failed. err: %s", err.Error())
 	}

@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+var DbName = "_go_mysql_sr"
+
 func GetPositionFilePath(conf *config.BaseConfig) string {
 	splits := strings.SplitAfter(*conf.FileName, "/")
 	lastIndex := len(splits) - 1

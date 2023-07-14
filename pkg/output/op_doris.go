@@ -152,7 +152,7 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel) {
 				if err != nil {
 					log.Fatalf("ack msg failed: %v", errors.ErrorStack(err))
 				}
-				log.Debugf("after commit callback lastCtl: %v", ds.lastCtlMsg.InputContext)
+				// log.Debugf("after commit callback lastCtl: %v", ds.lastCtlMsg.InputContext)
 			} else {
 				log.Fatalf("not found AfterCommitCallback func")
 			}
