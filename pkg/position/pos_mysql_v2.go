@@ -64,7 +64,7 @@ func (pos *MysqlPositionV2) LoadPosition(conf *config.BaseConfig) {
 	posTaSql := fmt.Sprintf(
 		"CREATE TABLE IF NOT EXISTS "+
 			"`%s`.`positions` ("+
-			"`id` int(11) NOT NULL,"+
+			"`id` int(11) NOT NULL AUTO_INCREMENT,"+
 			"`name` varchar(255) NOT NULL,"+
 			"`position` text,"+
 			"`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,"+

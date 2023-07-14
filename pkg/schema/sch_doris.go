@@ -64,10 +64,6 @@ func (dts *DorisTables) AddTable(db string, table string) (*Table, error) {
 	return ta, nil
 }
 
-func (dts *DorisTables) AddCreateTable(db string, table string, cols interface{}) error {
-	return nil
-}
-
 func (dts *DorisTables) UpdateTable(db string, table string, args interface{}) (err error) {
 	return nil
 }
@@ -131,6 +127,6 @@ func (dts *DorisTables) ExecuteSQL(cmd string, args ...interface{}) (rr *mysql.R
 	return
 }
 
-func (dts *DorisTables) SaveMeta() error {
+func (dts *DorisTables) SaveMeta(data string) error {
 	return nil
 }

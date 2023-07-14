@@ -130,7 +130,7 @@ func main() {
 		ip = &input.MysqlInputPlugin{}
 		pos = &position.MysqlPositionV2{}
 		// init input schema
-		inSchema = &schema.MysqlTables{}
+		inSchema = &schema.MysqlTablesV2{}
 	case "mongo":
 		isc = &config.MongoConfig{}
 		// 初始化input插件实例

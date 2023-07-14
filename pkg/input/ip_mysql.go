@@ -20,6 +20,7 @@ import (
 	"github.com/pingcap/parser/ast"
 	"github.com/siddontang/go-log/log"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 )
@@ -221,15 +222,22 @@ func (mi *MysqlInputPlugin) OnPosSynced(pos mysql.Position, set mysql.GTIDSet, f
 
 func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replication.QueryEvent) error {
 	log.Infof("ddl event: %v", string(queryEvent.Query))
-
 	stmts, _, err := mi.parser.Parse(string(queryEvent.Query), "", "")
 	if err != nil {
 		log.Fatalf("parse query(%s) err %v", queryEvent.Query, err)
 	}
 	for _, stmt := range stmts {
-		mi.parseStmt(stmt, string(queryEvent.Schema))
-		// send ddl event
-
+		ns := mi.parseStmt(stmt, string(queryEvent.Schema))
+		for _, n := range ns {
+			err = mi.inSchema.UpdateTable(n.db, n.table, string(queryEvent.Query))
+			if err != nil {
+				if strings.Index(err.Error(), "ERROR 1105") > -1 {
+					log.Warnf("handle query(%s) err %v", queryEvent.Query, err)
+				} else {
+					log.Fatalf("handle query(%s) err %v", queryEvent.Query, err)
+				}
+			}
+		}
 	}
 	return nil
 }
@@ -462,13 +470,6 @@ func (mi *MysqlInputPlugin) parseStmt(stmt ast.StmtNode, db string) (ns []*node)
 			n.db = db
 		}
 		ns = []*node{n}
-
-		for _, spec := range t.Specs {
-			err := mi.inSchema.UpdateTable(n.db, n.table, spec)
-			if err != nil {
-				log.Fatalf("ddl alter event update table meta failed, err: %v", err.Error())
-			}
-		}
 	case *ast.DropTableStmt:
 		for _, table := range t.Tables {
 			n := &node{
@@ -484,14 +485,6 @@ func (mi *MysqlInputPlugin) parseStmt(stmt ast.StmtNode, db string) (ns []*node)
 		}
 		if t.Table.Schema.String() == "" {
 			n.db = db
-		}
-		err := mi.inSchema.AddCreateTable(n.db, n.table, t.Cols)
-		if err != nil {
-			log.Fatalf("ddl alter event add table meta failed, err: %v", err.Error())
-		}
-
-		if err := mi.inSchema.SaveMeta(); err != nil {
-			log.Fatalf("save tables meta failed. err: %v", err.Error())
 		}
 		ns = []*node{n}
 	case *ast.TruncateTableStmt:

@@ -79,10 +79,6 @@ func (mts *MongoTables) AddTable(db string, table string) (*Table, error) {
 	return nil, nil
 }
 
-func (mts *MongoTables) AddCreateTable(db string, table string, cols interface{}) error {
-	return nil
-}
-
 func (mts *MongoTables) UpdateTable(db string, table string, args interface{}) (err error) {
 	return nil
 }
@@ -130,6 +126,6 @@ func (mts *MongoTables) unionColumns(cacheTable *Table, msgTable *Table) {
 	}
 }
 
-func (mts *MongoTables) SaveMeta() error {
+func (mts *MongoTables) SaveMeta(data string) error {
 	return nil
 }

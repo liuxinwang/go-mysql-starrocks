@@ -64,10 +64,6 @@ func (sts *StarrocksTables) AddTable(db string, table string) (*Table, error) {
 	return ta, nil
 }
 
-func (sts *StarrocksTables) AddCreateTable(db string, table string, cols interface{}) error {
-	return nil
-}
-
 func (sts *StarrocksTables) UpdateTable(db string, table string, args interface{}) (err error) {
 	return nil
 }
@@ -131,6 +127,6 @@ func (sts *StarrocksTables) ExecuteSQL(cmd string, args ...interface{}) (rr *mys
 	return
 }
 
-func (sts *StarrocksTables) SaveMeta() error {
+func (sts *StarrocksTables) SaveMeta(data string) error {
 	return nil
 }

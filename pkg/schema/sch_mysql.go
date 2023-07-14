@@ -46,7 +46,7 @@ func (mts *MysqlTables) NewSchemaTables(conf *config.BaseConfig, pluginConfig in
 	mts.LoadMetaFromLocal(conf)
 	if len(mts.MysqlTablesMeta.tables) == 0 {
 		mts.LoadMetaFromDB()
-		if err = mts.SaveMeta(); err != nil {
+		if err = mts.SaveMeta(""); err != nil {
 			log.Fatalf("save tables meta failed. err: %v", err.Error())
 		}
 	}
@@ -109,7 +109,7 @@ func (mts *MysqlTables) AddCreateTable(db string, table string, cols interface{}
 	mts.tables[key] = ta
 	mts.tablesLock.Unlock()
 	log.Infof("create table: %s.%s, %v", ta.Schema, ta.Name, *ta)
-	err = mts.SaveMeta()
+	err = mts.SaveMeta("")
 	if err != nil {
 		return err
 	}
@@ -132,7 +132,7 @@ func (mts *MysqlTables) UpdateTable(db string, table string, spec interface{}) (
 		if err = t.DelColumn(oldColumnName); err != nil {
 			log.Warnf("%v", err.Error())
 		}
-		err = mts.SaveMeta()
+		err = mts.SaveMeta("")
 		if err != nil {
 			return err
 		}
@@ -170,7 +170,7 @@ func (mts *MysqlTables) UpdateTable(db string, table string, spec interface{}) (
 
 			}
 		}
-		err = mts.SaveMeta()
+		err = mts.SaveMeta("")
 		if err != nil {
 			return err
 		}
@@ -207,7 +207,7 @@ func (mts *MysqlTables) UpdateTable(db string, table string, spec interface{}) (
 
 			}
 		}
-		err = mts.SaveMeta()
+		err = mts.SaveMeta("")
 		if err != nil {
 			return err
 		}
@@ -245,7 +245,7 @@ func (mts *MysqlTables) UpdateTable(db string, table string, spec interface{}) (
 
 			}
 		}
-		err = mts.SaveMeta()
+		err = mts.SaveMeta("")
 		if err != nil {
 			return err
 		}
@@ -362,7 +362,7 @@ func (mts *MysqlTables) LoadMetaFromDB() {
 	log.Debugf("end load tables meta from db: %v", mts.tables)
 }
 
-func (mts *MysqlTables) SaveMeta() error {
+func (mts *MysqlTables) SaveMeta(data string) error {
 	// persistence now meta
 	mts.Lock()
 	defer mts.Unlock()
