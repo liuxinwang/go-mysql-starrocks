@@ -20,7 +20,6 @@ import (
 	"github.com/pingcap/parser/ast"
 	"github.com/siddontang/go-log/log"
 	"regexp"
-	"strings"
 	"sync"
 	"time"
 )
@@ -91,9 +90,9 @@ func (mi *MysqlInputPlugin) StartInput(pos position.Position, syncChan *channel.
 			log.Fatal(err)
 		}
 	} else {
-		log.Infof("%s param 'binlog-gtid' not exist", mysqlPos.FilePath)
-		log.Infof("The configuration file [input] param 'start-gtid' not exist")
-		log.Infof("get the current 'binlog-gtid' value")
+		log.Infof("load 'binlog-gtid' from db not exist")
+		log.Infof("config file [input] param 'start-gtid' not exist")
+		log.Infof("start get the current 'binlog-gtid' value")
 		if gs, err = c.GetMasterGTIDSet(); err != nil {
 			log.Fatal(err)
 		}
@@ -177,7 +176,6 @@ func (mi *MysqlInputPlugin) OnRow(e *canal.RowsEvent) error {
 }
 
 func (mi *MysqlInputPlugin) OnTableChanged(schema string, table string) error {
-
 	// onDDL before
 	// send flush data msg
 	// mi.syncChan.SyncChan <- ctlMsg
@@ -221,21 +219,30 @@ func (mi *MysqlInputPlugin) OnPosSynced(pos mysql.Position, set mysql.GTIDSet, f
 }
 
 func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replication.QueryEvent) error {
-	log.Infof("ddl event: %v", string(queryEvent.Query))
-	stmts, _, err := mi.parser.Parse(string(queryEvent.Query), "", "")
+	db := string(queryEvent.Schema)
+	ddl := string(queryEvent.Query)
+	stmts, _, err := mi.parser.Parse(ddl, "", "")
 	if err != nil {
 		log.Fatalf("parse query(%s) err %v", queryEvent.Query, err)
 	}
+	log.Infof("ddl event: %v", ddl)
 	for _, stmt := range stmts {
-		ns := mi.parseStmt(stmt, string(queryEvent.Schema))
+		ns := mi.parseStmt(stmt)
 		for _, n := range ns {
-			err = mi.inSchema.UpdateTable(n.db, n.table, string(queryEvent.Query))
+			if n.db == "" {
+				n.db = db
+			}
+			if n.db == position.DbName {
+				continue
+			}
+
+			// fix go-mysql-server not support column charset
+			reg, _ := regexp.Compile("charset \\w*")
+			ddl = reg.ReplaceAllString(ddl, "")
+
+			err = mi.inSchema.UpdateTable(n.db, n.table, ddl)
 			if err != nil {
-				if strings.Index(err.Error(), "ERROR 1105") > -1 {
-					log.Warnf("handle query(%s) err %v", queryEvent.Query, err)
-				} else {
-					log.Fatalf("handle query(%s) err %v", queryEvent.Query, err)
-				}
+				log.Warnf("handle query(%s) err %v", queryEvent.Query, err)
 			}
 		}
 	}
@@ -451,7 +458,7 @@ type node struct {
 	table string
 }
 
-func (mi *MysqlInputPlugin) parseStmt(stmt ast.StmtNode, db string) (ns []*node) {
+func (mi *MysqlInputPlugin) parseStmt(stmt ast.StmtNode) (ns []*node) {
 	switch t := stmt.(type) {
 	case *ast.RenameTableStmt:
 		for _, tableInfo := range t.TableToTables {
@@ -466,9 +473,6 @@ func (mi *MysqlInputPlugin) parseStmt(stmt ast.StmtNode, db string) (ns []*node)
 			db:    t.Table.Schema.String(),
 			table: t.Table.Name.String(),
 		}
-		if t.Table.Schema.String() == "" {
-			n.db = db
-		}
 		ns = []*node{n}
 	case *ast.DropTableStmt:
 		for _, table := range t.Tables {
@@ -482,9 +486,6 @@ func (mi *MysqlInputPlugin) parseStmt(stmt ast.StmtNode, db string) (ns []*node)
 		n := &node{
 			db:    t.Table.Schema.String(),
 			table: t.Table.Name.String(),
-		}
-		if t.Table.Schema.String() == "" {
-			n.db = db
 		}
 		ns = []*node{n}
 	case *ast.TruncateTableStmt:

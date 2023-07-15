@@ -140,11 +140,11 @@ func main() {
 		inSchema = &schema.MongoTables{}
 	}
 	isc.NewInputSourceConfig(baseConfig.InputConfig.Config)
+	pos.LoadPosition(baseConfig)
 	inSchema.NewSchemaTables(baseConfig, baseConfig.InputConfig.Config["source"])
 
 	oo.NewOutput(otc, rr.GetRuleToMap(), inSchema, outSchema)
 	ip.NewInput(isc, rr.GetRuleToRegex(), inSchema)
-	pos.LoadPosition(baseConfig)
 
 	// 初始化filter配置
 	matcherFilter = filter.NewMatcherFilter(baseConfig.FilterConfig)

@@ -54,41 +54,7 @@ func (pos *MysqlPositionV2) LoadPosition(conf *config.BaseConfig) {
 	}
 
 	// init database
-	createSql := fmt.Sprintf(
-		"CREATE "+
-			"DATABASE IF NOT EXISTS `%s` DEFAULT CHARACTER SET utf8mb4", DbName)
-	_, err = pos.executeSQL(createSql)
-	if err != nil {
-		log.Fatal("init position db `_go_mysql_sr` failed. err: ", err.Error())
-	}
-	posTaSql := fmt.Sprintf(
-		"CREATE TABLE IF NOT EXISTS "+
-			"`%s`.`positions` ("+
-			"`id` int(11) NOT NULL AUTO_INCREMENT,"+
-			"`name` varchar(255) NOT NULL,"+
-			"`position` text,"+
-			"`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,"+
-			"`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,"+
-			"PRIMARY KEY (`id`),"+
-			"UNIQUE KEY `name` (`name`)"+
-			")", DbName)
-	_, err = pos.executeSQL(posTaSql)
-	if err != nil {
-		log.Fatal("init `position` table failed. err: ", err.Error())
-	}
-	initPositionData := MysqlBasePositionV2{BinlogName: "", BinlogPos: 0, BinlogGTID: ""}
-	marshal, err := json.Marshal(initPositionData)
-	if err != nil {
-		log.Fatal("init position data failed. err: ", err.Error())
-	}
-	posDataSql := fmt.Sprintf(
-		"insert "+
-			"ignore into `%s`.`positions`"+
-			"(name, position)values('%s', '%v')", DbName, conf.Name, string(marshal))
-	_, err = pos.executeSQL(posDataSql)
-	if err != nil {
-		log.Fatal("init `position` table failed. err: ", err.Error())
-	}
+	pos.initDb()
 
 	basePos := &MysqlBasePositionV2{}
 	queryPosSql := fmt.Sprintf("select `position` from `%s`.`positions` where `name` = '%s'", DbName, conf.Name)
@@ -120,7 +86,7 @@ func (pos *MysqlPositionV2) LoadPosition(conf *config.BaseConfig) {
 	}
 	if basePos.BinlogGTID != "" {
 		// update db position from local pos.info
-		marshal, err = json.Marshal(basePos)
+		marshal, err := json.Marshal(basePos)
 		if err != nil {
 			log.Fatal("init position data failed. err: ", err.Error())
 		}
@@ -138,6 +104,105 @@ func (pos *MysqlPositionV2) LoadPosition(conf *config.BaseConfig) {
 	// if binlogGTID is "", load config start-position
 	if conf.InputConfig.StartPosition != "" {
 		pos.BinlogGTID = conf.InputConfig.StartPosition
+	}
+}
+
+func (pos *MysqlPositionV2) initDb() {
+	r, err := pos.executeSQL("select 1 from information_schema.SCHEMATA where SCHEMA_NAME = ?", DbName)
+	if err != nil {
+		log.Fatalf("init position db `_go_mysql_sr` failed. err: %v", err.Error())
+	}
+
+	if r.RowNumber() == 0 {
+		createSql := fmt.Sprintf(
+			"CREATE "+
+				"DATABASE IF NOT EXISTS `%s` DEFAULT CHARACTER SET utf8mb4", DbName)
+		_, err = pos.executeSQL(createSql)
+		if err != nil {
+			log.Fatalf("init position db `_go_mysql_sr` failed. err: %v", err.Error())
+		}
+	}
+
+	r, err = pos.executeSQL("select 1 from "+
+		"information_schema.tables where table_schema = ? and table_name = ?", DbName, "positions")
+	if err != nil {
+		log.Fatalf("query table failed. err: %v", err.Error())
+	}
+
+	if r.RowNumber() == 0 {
+		posTaSql := fmt.Sprintf(
+			"CREATE TABLE IF NOT EXISTS "+
+				"`%s`.`positions` ("+
+				"`id` int(11) NOT NULL AUTO_INCREMENT,"+
+				"`name` varchar(255) NOT NULL,"+
+				"`position` text,"+
+				"`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,"+
+				"`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,"+
+				"PRIMARY KEY (`id`),"+
+				"UNIQUE KEY `name` (`name`)"+
+				")", DbName)
+		_, err = pos.executeSQL(posTaSql)
+		if err != nil {
+			log.Fatalf("query table failed. err: %v", err.Error())
+		}
+	}
+
+	// init table table_checkpoints table_increment_ddl
+	r, err = pos.executeSQL("select 1 from "+
+		"information_schema.tables where table_schema = ? and table_name = ?", DbName, "table_checkpoints")
+	if err != nil {
+		log.Fatalf("query table failed. err: %v", err.Error())
+	}
+
+	if r.RowNumber() == 0 {
+		tcTaSql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS "+
+			"`%s`.`table_checkpoints` ("+
+			"`id` int(11) NOT NULL AUTO_INCREMENT,"+
+			"`pos_id` int(11) NOT NULL,"+
+			"`tables_meta` mediumtext,"+
+			"`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,"+
+			"`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,"+
+			"PRIMARY KEY (`id`))", DbName)
+		_, err = pos.executeSQL(tcTaSql)
+		if err != nil {
+			log.Fatal("init `table_checkpoints` table failed. err: ", err.Error())
+		}
+	}
+
+	r, err = pos.executeSQL("select 1 from "+
+		"information_schema.tables where table_schema = ? and table_name = ?", DbName, "table_increment_ddl")
+	if err != nil {
+		log.Fatalf("init position db `_go_mysql_sr` failed. err: %v", err.Error())
+	}
+
+	if r.RowNumber() == 0 {
+		tidTaSql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS "+
+			"`%s`.`table_increment_ddl` ("+
+			"`id` int(11) NOT NULL AUTO_INCREMENT,"+
+			"`pos_id` int(11) NOT NULL,"+
+			"`db` varchar(50) NOT NULL,"+
+			"`table_ddl` text,"+
+			"`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,"+
+			"`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,"+
+			"PRIMARY KEY (`id`))", DbName)
+		_, err = pos.executeSQL(tidTaSql)
+		if err != nil {
+			log.Fatal("init `table_increment_ddl` table failed. err: ", err.Error())
+		}
+	}
+
+	initPositionData := MysqlBasePositionV2{BinlogName: "", BinlogPos: 0, BinlogGTID: ""}
+	marshal, err := json.Marshal(initPositionData)
+	if err != nil {
+		log.Fatal("init position data failed. err: ", err.Error())
+	}
+	posDataSql := fmt.Sprintf(
+		"insert "+
+			"ignore into `%s`.`positions`"+
+			"(name, position)values('%s', '%v')", DbName, pos.Name, string(marshal))
+	_, err = pos.executeSQL(posDataSql)
+	if err != nil {
+		log.Fatal("init `position` table failed. err: ", err.Error())
 	}
 }
 

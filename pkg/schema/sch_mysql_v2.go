@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	sqle "github.com/dolthub/go-mysql-server"
@@ -37,6 +38,9 @@ type MysqlTablesV2 struct {
 	memConnLock sync.Mutex
 	memConn     *client.Conn
 	FilePath    string
+	wg          sync.WaitGroup
+	ctx         context.Context
+	cancel      context.CancelFunc
 }
 
 func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig interface{}) {
@@ -46,11 +50,13 @@ func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 	if err != nil {
 		log.Fatalf("new schema tables config parsing failed. err: %v", err.Error())
 	}
+	mts.ctx, mts.cancel = context.WithCancel(context.Background())
 	// init conn
 	mts.conn, err = client.Connect(fmt.Sprintf("%s:%d", mts.Host, mts.Port), mts.UserName, mts.Password, "")
 	if err != nil {
 		log.Fatalf("new schema tables conn failed. err: %v", err.Error())
 	}
+	_ = mts.conn.SetCharset("utf8")
 
 	// init vm memory mysql server for schema meta
 	go mts.newMemMyServer()
@@ -62,33 +68,6 @@ func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 		log.Fatalf("new schema tables conn failed. err: %v", err.Error())
 	}
 
-	// init table table_checkpoints table_increment_ddl
-	tcTaSql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS "+
-		"`%s`.`table_checkpoints` ("+
-		"`id` int(11) NOT NULL AUTO_INCREMENT,"+
-		"`pos_id` int(11) NOT NULL,"+
-		"`tables_meta` mediumtext,"+
-		"`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,"+
-		"`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,"+
-		"PRIMARY KEY (`id`))", position.DbName)
-	_, err = mts.ExecuteSQL(tcTaSql)
-	if err != nil {
-		log.Fatal("init `table_checkpoints` table failed. err: ", err.Error())
-	}
-	tidTaSql := fmt.Sprintf("CREATE TABLE IF NOT EXISTS "+
-		"`%s`.`table_increment_ddl` ("+
-		"`id` int(11) NOT NULL AUTO_INCREMENT,"+
-		"`pos_id` int(11) NOT NULL,"+
-		"`db` varchar(50) NOT NULL,"+
-		"`table_ddl` text,"+
-		"`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,"+
-		"`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,"+
-		"PRIMARY KEY (`id`))", position.DbName)
-	_, err = mts.ExecuteSQL(tidTaSql)
-	if err != nil {
-		log.Fatal("init `table_increment_ddl` table failed. err: ", err.Error())
-	}
-
 	// get last checkpoint data
 	getLastTimeSql := fmt.Sprintf("select tc.`tables_meta`, tc.`updated_at` "+
 		"from `%s`.`table_checkpoints` tc "+
@@ -98,6 +77,18 @@ func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 	if err != nil {
 		log.Fatal("query last checkpoint data failed. err: ", err.Error())
 	}
+	// get pos_id
+	getPosIdSql := fmt.Sprintf("select id from `%s`.positions where name = '%s'", position.DbName, conf.Name)
+	posIdRs, err := mts.ExecuteSQL(getPosIdSql)
+	if err != nil {
+		log.Fatal("query last checkpoint data failed. err: ", err.Error())
+	}
+	posId, err := posIdRs.GetInt(0, 0)
+	if err != nil {
+		log.Fatalf("get pos_id failed. err: %v", err.Error())
+	}
+	mts.posId = int(posId)
+
 	var tablesMeta string
 	var updatedAt string
 	if r.RowNumber() == 0 {
@@ -109,17 +100,6 @@ func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 		tablesMeta = string(marshal)
 
 		// save meta
-		// get pos_id
-		getPosIdSql := fmt.Sprintf("select id from `%s`.positions where name = '%s'", position.DbName, conf.Name)
-		r, err = mts.ExecuteSQL(getPosIdSql)
-		if err != nil {
-			log.Fatal("query last checkpoint data failed. err: ", err.Error())
-		}
-		posId, err := r.GetInt(0, 0)
-		if err != nil {
-			log.Fatalf("get pos_id failed. err: %v", err.Error())
-		}
-		mts.posId = int(posId)
 		err = mts.SaveMeta(tablesMeta)
 		if err != nil {
 			log.Fatalf("save tables meta failed. err: ", err.Error())
@@ -137,6 +117,7 @@ func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 
 	// handle increment ddl
 	if updatedAt != "" {
+		log.Infof("load last table meta for time: %s", updatedAt)
 		incrementDdlSql := fmt.Sprintf("select db, table_ddl "+
 			"from `%s`.table_increment_ddl where updated_at >= '%s'", position.DbName, updatedAt)
 		idr, err := mts.ExecuteSQL(incrementDdlSql)
@@ -146,12 +127,14 @@ func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 		for i := 0; i < idr.RowNumber(); i++ {
 			db, _ := idr.GetString(i, 0)
 			ddl, _ := idr.GetString(i, 1)
-			err = mts.UpdateTable(db, "", ddl)
+			err = mts.incrementDdlExec(db, "", ddl)
 			if err != nil {
 				log.Fatalf("handle increment ddl failed. err: %v", err.Error())
 			}
 		}
+		log.Infof("replay increment ddl done, exec ddl events: %d", idr.RowNumber())
 	}
+	mts.StartTimerSaveMeta()
 }
 
 func (mts *MysqlTablesV2) newMemMyServer() {
@@ -199,6 +182,7 @@ func (mts *MysqlTablesV2) UpdateTable(db string, table string, ddl interface{}) 
 	if err = mts.memConn.UseDB(db); err != nil {
 		return err
 	}
+	_ = mts.memConn.SetCharset("utf8")
 	_, err = mts.ExecuteSQLForMemDB(fmt.Sprintf("%v", ddl))
 	if err != nil {
 		return err
@@ -206,6 +190,17 @@ func (mts *MysqlTablesV2) UpdateTable(db string, table string, ddl interface{}) 
 	insSql := fmt.Sprintf("insert "+
 		"into `%s`.table_increment_ddl(`pos_id`, `db`, `table_ddl`)values(?, ?, ?)", position.DbName)
 	_, err = mts.ExecuteSQL(insSql, mts.posId, db, fmt.Sprintf("%v", ddl))
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
+func (mts *MysqlTablesV2) incrementDdlExec(db string, table string, ddl interface{}) (err error) {
+	if err = mts.memConn.UseDB(db); err != nil {
+		return err
+	}
+	_, err = mts.ExecuteSQLForMemDB(fmt.Sprintf("%v", ddl))
 	if err != nil {
 		return err
 	}
@@ -240,6 +235,9 @@ func (mts *MysqlTablesV2) RefreshTable(db string, table string) {
 }
 
 func (mts *MysqlTablesV2) Close() {
+	mts.cancel()
+	mts.wg.Wait()
+	log.Infof("close mysql save table meta ticker goroutine.")
 	if mts.conn != nil {
 		err := mts.conn.Close()
 		if err != nil {
@@ -375,7 +373,7 @@ func (mts *MysqlTablesV2) SaveMeta(tablesMeta string) error {
 	if err != nil {
 		return err
 	}
-	log.Infof("flush tables meta to db.")
+	log.Infof("flush tables meta to db")
 	return nil
 }
 
@@ -410,4 +408,33 @@ func (mts *MysqlTablesV2) GetColumnTypeFromRawType(rawType string) int {
 		columnType = TypeString
 	}
 	return columnType
+}
+
+func (mts *MysqlTablesV2) StartTimerSaveMeta() {
+	mts.wg.Add(1)
+	go func() {
+		defer mts.wg.Done()
+		ticker := time.NewTicker(time.Second * 86400) // 24h
+		defer ticker.Stop()
+
+		for {
+			select {
+			case <-ticker.C:
+				marshal, err := json.Marshal(mts.LoadMetaFromDB())
+				if err != nil {
+					log.Fatalf("save tables meta failed. err: ", err.Error())
+				}
+				tablesMeta := string(marshal)
+
+				// save meta
+				err = mts.SaveMeta(tablesMeta)
+				if err != nil {
+					log.Fatalf("save tables meta failed. err: ", err.Error())
+				}
+				log.Infof("timer save meta to db successfully")
+			case <-mts.ctx.Done():
+				return
+			}
+		}
+	}()
 }
