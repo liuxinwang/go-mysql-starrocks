@@ -56,6 +56,10 @@ func main() {
 		}(cntxt)
 	}
 
+	if help.MetaDbPort != nil {
+		schema.MemDbPort = *help.MetaDbPort
+	}
+
 	// 进程信号处理
 	sc := make(chan os.Signal, 1)
 	signal.Notify(sc,

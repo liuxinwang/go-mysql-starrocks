@@ -20,9 +20,6 @@ import (
 	"time"
 )
 
-var MemDbHost = "localhost"
-var MemDbPort = 5166
-
 type MysqlTablesMetaV2 struct {
 	tables map[string]*Table
 }
@@ -349,16 +346,19 @@ func (mts *MysqlTablesV2) loadTablesMetaToMemDB(tablesMeta string) {
 	}
 	for k, v := range tablesMetaMap {
 		dbName := strings.Split(k, ".")[0]
+		tableName := strings.Split(k, ".")[1]
 		// tableName := strings.SplitN(k, ".", 1)
 		_, err = mts.ExecuteSQLForMemDB(fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", dbName))
 		if err != nil {
-			log.Fatalf("load tables meta to memDB failed, err: %v", err.Error())
+			log.Fatalf("load tables meta to memDB failed, db name: %s, err: %v", dbName, err.Error())
 		}
+		log.Debugf("load tables meta to memDB for create database: %s", dbName)
 		createDDL := strings.Replace(fmt.Sprintf("%v", v), "CREATE TABLE ", fmt.Sprintf("CREATE TABLE `%s`.", dbName), 1)
 		_, err = mts.ExecuteSQLForMemDB(createDDL)
 		if err != nil {
-			log.Fatalf("load tables meta to memDB failed, err: %v", err.Error())
+			log.Warnf("load tables meta to memDB failed, create ddl: %s, err: %v", createDDL, err.Error())
 		}
+		log.Debugf("load tables meta to memDB for create table: %s.%s", dbName, tableName)
 	}
 }
 

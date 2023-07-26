@@ -36,6 +36,9 @@ const (
 	TypeDecimal                         // decimal
 )
 
+var MemDbHost = "localhost"
+var MemDbPort = 5166 // default 5166
+
 type Table struct {
 	Schema  string        `toml:"schema" json:"schema"`
 	Name    string        `toml:"name" json:"name"`
