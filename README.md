@@ -12,7 +12,13 @@
 1. GO构建版本 v1.18.10
 2. MySQL 需要开启gtid
 ```
-#### 1. 修改配置文件
+#### 1. 创建同步账号
+```sql
+mysql> CREATE USER 'go_mysql_sr'@'%' IDENTIFIED BY 'XXXXXX';
+mysql> GRANT ALL ON _go_mysql_sr.* TO 'go_mysql_sr'@'%';
+mysql> GRANT SELECT, REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'go_mysql_sr'@'%';
+```
+#### 2. 修改配置文件
 mysql-to-starrocks.toml
 ```toml
 # name 必填，多实例运行时需保证全局唯一
@@ -26,7 +32,7 @@ type = "mysql"
 [input.config.source] # mysql连接信息
 host = "127.0.0.1"
 port = 3306
-username = "root"
+username = "go_mysql_sr"
 password = ""
 
 [sync-param]
@@ -59,7 +65,7 @@ flush-delay-second = 10
 #rename-as = ["col_11", "col_22"]
 
 [output]
-type = "starrocks"
+type = "starrocks" # or doris
 
 [output.config.target] # starrocks连接信息
 host = "127.0.0.1"
@@ -81,30 +87,30 @@ target-schema = "starrocks_test"
 target-table = "tb2"
 ```
 
-#### 2. 启动
+#### 3. 启动
 ```shell
 [sr@ ~]$ ./go-mysql-sr-linux-xxxxxx -config mysql-to-starrocks.toml
 ```
 
-#### 3. 查看日志
+#### 4. 查看日志
 默认输出到控制台，指定log-file参数运行
 ```shell
 [sr@ ~]$ ./go-mysql-sr-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log
 [sr@ ~]$ tail -f mysql2starrocks.log
 ```
 
-#### 4. 查看帮助
+#### 5. 查看帮助
 ```shell
 [sr@ ~]$ ./go-mysql-sr-linux-xxxxxx -h
 ```
 
-#### 5. 后台运行
+#### 6. 后台运行
 ```shell
 [sr@ ~]$ ./go-mysql-sr-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log -level info -daemon
 ```
 
-#### 6. 监控
-6.1 集成prometheus，开放6166端口，通过metrics暴露指标
+#### 7. 监控
+7.1 集成prometheus，开放6166端口，通过metrics暴露指标
 ```shell
 [sr@ ~]$ curl localhost:6166/metrics
 # 参数说明
@@ -119,7 +125,7 @@ go_mysql_sr_write_delay_time_seconds 1
 # 写入目的端消息数（累加）
 go_mysql_sr_write_processed_ops_total 6924
 ```
-6.2 prometheus配置参考
+7.2 prometheus配置参考
 ```shell
 scrape_configs:
   # 新增go-mysql-sr的job_name
@@ -127,24 +133,24 @@ scrape_configs:
     static_configs:
       - targets: ["host.docker.internal:6166", "host.docker.internal:6167"]
 ```
-6.3 grafana dashboard 监控，json file下载 [grafana-goMysqlSr-dashboard.json](configs/grafana-goMysqlSr-dashboard.json)
+7.3 grafana dashboard 监控，json file下载 [grafana-goMysqlSr-dashboard.json](configs/grafana-goMysqlSr-dashboard.json)
 ![](docs/img/grafana.png)
 
-#### 7. API
-7.1 新增同步表
+#### 8. API
+8.1 新增同步表
 ```shell
 curl localhost:6166/api/addRule -d '{"source-schema": "mysql_test","source-table": "tb3", "target-schema": "starrocks_test", "target-table": "tb3"}'
 ```
 *result: add rule handle successfully.*
 
 
-7.2 删除同步表
+8.2 删除同步表
 ```shell
 curl localhost:6166/api/delRule -d '{"source-schema": "mysql_test","source-table": "tb3"}'
 ```
 *result: delete rule handle successfully.*
 
-7.3 查询同步表
+8.3 查询同步表
 ```shell
 curl -s localhost:6166/api/getRule | python -m json.tool
 ```
