@@ -242,7 +242,7 @@ func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replicatio
 
 			err = mi.inSchema.UpdateTable(n.db, n.table, ddl)
 			if err != nil {
-				log.Warnf("handle query(%s) err %v", queryEvent.Query, err)
+				log.Errorf("handle query(%s) err %v", queryEvent.Query, err)
 			}
 		}
 	}
