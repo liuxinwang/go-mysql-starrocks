@@ -27,7 +27,7 @@ func HelpInit() *Help {
 	help.OutputType = flag.String("type", "starrocks", "output type: starrocks, output")
 	help.Daemon = flag.Bool("daemon", false, "daemon run, must include param 'log-file'")
 	help.HttpPort = flag.Int("http-port", 6166, "http monitor port, curl http://localhost:6166/metrics")
-	help.MetaDbPort = flag.Int("meta-db-port", 5166, "source table meta server port")
+	help.MetaDbPort = flag.Int("meta-db-port", 5166, "local memory mysql server for save source table meta")
 	flag.BoolVar(&help.printVersion, "version", false, "print program build version")
 	flag.Parse()
 	// 这个需要放在第一个判断
