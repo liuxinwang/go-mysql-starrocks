@@ -126,7 +126,7 @@ func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 			ddl, _ := idr.GetString(i, 1)
 			err = mts.incrementDdlExec(db, "", ddl)
 			if err != nil {
-				log.Fatalf("handle increment ddl failed. err: %v", err.Error())
+				log.Errorf("handle increment ddl failed, ddl: %v, err: %v", ddl, err.Error())
 			}
 		}
 		log.Infof("replay increment ddl done, exec ddl events: %d", idr.RowNumber())
@@ -177,7 +177,19 @@ func (mts *MysqlTablesV2) GetTableCreateDDL(db string, table string) (string, er
 
 func (mts *MysqlTablesV2) UpdateTable(db string, table string, ddl interface{}) (err error) {
 	if err = mts.memConn.UseDB(db); err != nil {
-		return err
+		// db not found handle: create database
+		if strings.Contains(err.Error(), "database not found") {
+			log.Infof("memory db: database not found, create database %s", db)
+			err = mts.createDbForMemDB(db)
+			if err != nil {
+				return err
+			}
+			if err = mts.memConn.UseDB(db); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 	_ = mts.memConn.SetCharset("utf8")
 	_, err = mts.ExecuteSQLForMemDB(fmt.Sprintf("%v", ddl))
@@ -193,9 +205,31 @@ func (mts *MysqlTablesV2) UpdateTable(db string, table string, ddl interface{}) 
 	return nil
 }
 
+func (mts *MysqlTablesV2) createDbForMemDB(db string) (err error) {
+	_ = mts.memConn.SetCharset("utf8")
+	ddl := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", db)
+	_, err = mts.ExecuteSQLForMemDB(ddl)
+	if err != nil {
+		return err
+	}
+	return nil
+}
+
 func (mts *MysqlTablesV2) incrementDdlExec(db string, table string, ddl interface{}) (err error) {
 	if err = mts.memConn.UseDB(db); err != nil {
-		return err
+		// db not found handle: create database
+		if strings.Contains(err.Error(), "database not found") {
+			log.Infof("memory db: database not found, create database %s", db)
+			err = mts.createDbForMemDB(db)
+			if err != nil {
+				return err
+			}
+			if err = mts.memConn.UseDB(db); err != nil {
+				return err
+			}
+		} else {
+			return err
+		}
 	}
 	_, err = mts.ExecuteSQLForMemDB(fmt.Sprintf("%v", ddl))
 	if err != nil {
