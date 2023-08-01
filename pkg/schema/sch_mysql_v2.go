@@ -126,8 +126,8 @@ func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 	if updatedAt != "" {
 		log.Infof("load last table meta for time: %s", updatedAt)
 		incrementDdlSql := fmt.Sprintf("select db, table_ddl "+
-			"from `%s`.table_increment_ddl where updated_at >= '%s' "+
-			"and updated_at < '%s'", position.DbName, updatedAt, gtidTime)
+			"from `%s`.table_increment_ddl where pos_id = '%d' and updated_at >= '%s' "+
+			"and updated_at < '%s'", position.DbName, posId, updatedAt, gtidTime)
 		idr, err := mts.ExecuteSQL(incrementDdlSql)
 		if err != nil {
 			log.Fatal("get increment ddl failed. err: ", err.Error())
