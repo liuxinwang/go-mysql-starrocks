@@ -36,7 +36,6 @@ type Doris struct {
 	connLock      sync.Mutex
 	conn          *client.Conn
 	inSchema      schema.Schema
-	outSchema     schema.Schema
 	wg            sync.WaitGroup
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -44,11 +43,7 @@ type Doris struct {
 
 var DeleteCondition = fmt.Sprintf("%s=1", DeleteColumn)
 
-func (ds *Doris) NewOutput(
-	outputConfig interface{},
-	rulesMap map[string]interface{},
-	inSchema schema.Schema,
-	outSchema schema.Schema) {
+func (ds *Doris) NewOutput(outputConfig interface{}, rulesMap map[string]interface{}, inSchema schema.Schema) {
 	// init map obj
 	ds.tables = make(map[string]*schema.Table)
 	ds.rulesMap = make(map[string]*rule.DorisRule)
@@ -72,7 +67,6 @@ func (ds *Doris) NewOutput(
 		log.Fatal(err)
 	}
 	ds.inSchema = inSchema
-	ds.outSchema = outSchema
 }
 
 func (ds *Doris) StartOutput(outputChan *channel.OutputChannel) {

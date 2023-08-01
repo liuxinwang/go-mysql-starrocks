@@ -7,7 +7,7 @@ import (
 )
 
 type Plugin interface {
-	NewOutput(config interface{}, rulesMap map[string]interface{}, inSchema schema.Schema, outSchema schema.Schema)
+	NewOutput(config interface{}, rulesMap map[string]interface{}, inSchema schema.Schema)
 	StartOutput(outputChan *channel.OutputChannel)
 	Execute(msgs []*msg.Msg, tableObj *schema.Table, targetSchema string, targetTable string) error
 	Close()

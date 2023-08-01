@@ -8,10 +8,10 @@ import (
 )
 
 type Schema interface {
-	NewSchemaTables(config *config.BaseConfig, pluginConfig interface{})
+	NewSchemaTables(config *config.BaseConfig, pluginConfig interface{}, startPos string)
 	AddTableForMsg(msg *msg.Msg) error
 	AddTable(db string, table string) (*Table, error)
-	UpdateTable(db string, table string, args interface{}) error
+	UpdateTable(db string, table string, args interface{}, pos string) error
 	GetTable(db string, table string) (*Table, error)
 	RefreshTable(db string, table string)
 	SaveMeta(data string) error

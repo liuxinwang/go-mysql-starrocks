@@ -219,6 +219,7 @@ func (mi *MysqlInputPlugin) OnPosSynced(pos mysql.Position, set mysql.GTIDSet, f
 }
 
 func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replication.QueryEvent) error {
+	gtid := queryEvent.GSet.String()
 	db := string(queryEvent.Schema)
 	ddl := string(queryEvent.Query)
 	stmts, _, err := mi.parser.Parse(ddl, "", "")
@@ -240,7 +241,7 @@ func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replicatio
 			reg, _ := regexp.Compile("charset \\w*")
 			ddl = reg.ReplaceAllString(ddl, "")
 
-			err = mi.inSchema.UpdateTable(n.db, n.table, ddl)
+			err = mi.inSchema.UpdateTable(n.db, n.table, ddl, gtid)
 			if err != nil {
 				log.Errorf("handle query(%s) err %v", queryEvent.Query, err)
 			}

@@ -95,7 +95,6 @@ func main() {
 	var matcherFilter filter.MatcherFilter
 	var oo output.Plugin
 	var inSchema schema.Schema
-	var outSchema schema.Schema
 
 	// 初始化channel
 	syncChan = &channel.SyncChannel{}
@@ -111,19 +110,14 @@ func main() {
 		rr = &rule.DorisRules{}
 		// 初始化output插件实例
 		oo = &output.Doris{}
-		// init output schema
-		outSchema = &schema.DorisTables{}
 	case "starrocks":
 		otc = &config.StarrocksConfig{}
 		// 初始化rule配置
 		rr = &rule.StarrocksRules{}
 		// 初始化output插件实例
 		oo = &output.Starrocks{}
-		// init output schema
-		outSchema = &schema.StarrocksTables{}
 	}
 	otc.NewOutputTargetConfig(baseConfig.OutputConfig.Config)
-	outSchema.NewSchemaTables(baseConfig, baseConfig.OutputConfig.Config["target"])
 	rr.NewRule(baseConfig.OutputConfig.Config)
 
 	// 初始化input插件配置
@@ -144,10 +138,10 @@ func main() {
 		inSchema = &schema.MongoTables{}
 	}
 	isc.NewInputSourceConfig(baseConfig.InputConfig.Config)
-	pos.LoadPosition(baseConfig)
-	inSchema.NewSchemaTables(baseConfig, baseConfig.InputConfig.Config["source"])
+	position := pos.LoadPosition(baseConfig)
+	inSchema.NewSchemaTables(baseConfig, baseConfig.InputConfig.Config["source"], position)
 
-	oo.NewOutput(otc, rr.GetRuleToMap(), inSchema, outSchema)
+	oo.NewOutput(otc, rr.GetRuleToMap(), inSchema)
 	ip.NewInput(isc, rr.GetRuleToRegex(), inSchema)
 
 	// 初始化filter配置
@@ -180,7 +174,6 @@ func main() {
 		pos.Close()
 		// close schema conn
 		inSchema.Close()
-		outSchema.Close()
 		log.Infof("[Main] is stopped.")
 	}
 }

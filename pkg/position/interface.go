@@ -5,7 +5,7 @@ import (
 )
 
 type Position interface {
-	LoadPosition(config *config.BaseConfig)
+	LoadPosition(config *config.BaseConfig) string
 	SavePosition() error
 	ModifyPosition(v string) error
 	StartPosition()

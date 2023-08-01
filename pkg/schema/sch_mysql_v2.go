@@ -9,6 +9,7 @@ import (
 	memServer "github.com/dolthub/go-mysql-server/server"
 	"github.com/go-mysql-org/go-mysql/client"
 	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/go-mysql-org/go-mysql/replication"
 	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
@@ -40,7 +41,7 @@ type MysqlTablesV2 struct {
 	cancel      context.CancelFunc
 }
 
-func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig interface{}) {
+func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig interface{}, startPos string) {
 	mts.MysqlTablesMetaV2 = &MysqlTablesMetaV2{tables: make(map[string]*Table)}
 	mts.MysqlConfig = &config.MysqlConfig{}
 	err := mapstructure.Decode(pluginConfig, mts.MysqlConfig)
@@ -65,11 +66,20 @@ func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 		log.Fatalf("new schema tables conn failed. err: %v", err.Error())
 	}
 
+	// if position exists, get position timestamp
+	gtidTime := time.Now().Format("2006-01-02 15:04:05")
+	if startPos != "" {
+		gtidTimestamp := mts.getTimestampForGtid(startPos)
+		tm := time.Unix(int64(gtidTimestamp), 0)
+		gtidTime = tm.Format("2006-01-02 15:04:05")
+	}
+
 	// get last checkpoint data
 	getLastTimeSql := fmt.Sprintf("select tc.`tables_meta`, tc.`updated_at` "+
 		"from `%s`.`table_checkpoints` tc "+
 		"inner join `%s`.`positions` po on tc.pos_id = po.id "+
-		"where po.name = '%s' order by tc.updated_at desc limit 1", position.DbName, position.DbName, conf.Name)
+		"where po.name = '%s' and tc.updated_at < '%s' "+
+		"order by tc.updated_at desc limit 1", position.DbName, position.DbName, conf.Name, gtidTime)
 	r, err := mts.ExecuteSQL(getLastTimeSql)
 	if err != nil {
 		log.Fatal("query last checkpoint data failed. err: ", err.Error())
@@ -116,7 +126,8 @@ func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 	if updatedAt != "" {
 		log.Infof("load last table meta for time: %s", updatedAt)
 		incrementDdlSql := fmt.Sprintf("select db, table_ddl "+
-			"from `%s`.table_increment_ddl where updated_at >= '%s'", position.DbName, updatedAt)
+			"from `%s`.table_increment_ddl where updated_at >= '%s' "+
+			"and updated_at < '%s'", position.DbName, updatedAt, gtidTime)
 		idr, err := mts.ExecuteSQL(incrementDdlSql)
 		if err != nil {
 			log.Fatal("get increment ddl failed. err: ", err.Error())
@@ -175,7 +186,7 @@ func (mts *MysqlTablesV2) GetTableCreateDDL(db string, table string) (string, er
 	return createDDL, nil
 }
 
-func (mts *MysqlTablesV2) UpdateTable(db string, table string, ddl interface{}) (err error) {
+func (mts *MysqlTablesV2) UpdateTable(db string, table string, ddl interface{}, pos string) (err error) {
 	if err = mts.memConn.UseDB(db); err != nil {
 		// db not found handle: create database
 		if strings.Contains(err.Error(), "database not found") {
@@ -196,9 +207,9 @@ func (mts *MysqlTablesV2) UpdateTable(db string, table string, ddl interface{}) 
 	if err != nil {
 		return err
 	}
-	insSql := fmt.Sprintf("insert "+
-		"into `%s`.table_increment_ddl(`pos_id`, `db`, `table_ddl`)values(?, ?, ?)", position.DbName)
-	_, err = mts.ExecuteSQL(insSql, mts.posId, db, fmt.Sprintf("%v", ddl))
+	insSql := fmt.Sprintf("insert ignore "+
+		"into `%s`.table_increment_ddl(`pos_id`, `db`, `table_ddl`, `ddl_pos`)values(?, ?, ?, ?)", position.DbName)
+	_, err = mts.ExecuteSQL(insSql, mts.posId, db, fmt.Sprintf("%v", ddl), pos)
 	if err != nil {
 		return err
 	}
@@ -471,4 +482,43 @@ func (mts *MysqlTablesV2) StartTimerSaveMeta() {
 			}
 		}
 	}()
+}
+
+func (mts *MysqlTablesV2) getTimestampForGtid(gtid string) uint32 {
+	// Create a binlog syncer with a unique server id, the server id must be different from other MySQL's.
+	// flavor is mysql or mariadb
+	cfg := replication.BinlogSyncerConfig{
+		ServerID: 6166,
+		Flavor:   "mysql",
+		Host:     mts.Host,
+		Port:     uint16(mts.Port),
+		User:     mts.UserName,
+		Password: mts.Password,
+	}
+	log.Infof("create a slave for get start gtid timestamp...")
+	syncer := replication.NewBinlogSyncer(cfg)
+
+	// Start sync with specified binlog file and position
+	// streamer, _ := syncer.StartSync(mysql.Position{binlogFile, binlogPos})
+	var err error
+	var gs mysql.GTIDSet
+	if gs, err = mysql.ParseGTIDSet("mysql", gtid); err != nil {
+		log.Fatal(err)
+	}
+	streamer, _ := syncer.StartSyncGTID(gs)
+
+	var gtidTimestamp uint32
+
+	for {
+		ev, _ := streamer.GetEvent(context.Background())
+		// Dump event
+		// ev.Dump(os.Stdout)
+		if ev.Header.EventType == replication.GTID_EVENT {
+			gtidTimestamp = ev.Header.Timestamp
+			break
+		}
+	}
+	syncer.Close()
+	log.Infof("get start gtid timestamp: %v", gtidTimestamp)
+	return gtidTimestamp
 }

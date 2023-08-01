@@ -28,7 +28,7 @@ type MongoPosition struct {
 	cancel            context.CancelFunc
 }
 
-func (pos *MongoPosition) LoadPosition(config *config.BaseConfig) {
+func (pos *MongoPosition) LoadPosition(config *config.BaseConfig) string {
 	var err error
 	pos.ctx, pos.cancel = context.WithCancel(context.Background())
 	// load pos.info file position
@@ -43,7 +43,8 @@ func (pos *MongoPosition) LoadPosition(config *config.BaseConfig) {
 	pos.FilePath = positionFilePath
 
 	if pos.ResumeTokens.Data != "" {
-		return
+		tm := time.Unix(int64(pos.resumeTokenTimestamp()), 0)
+		return tm.Format("2006-01-02 15:04:05")
 	}
 
 	// if ResumeTokens data is "", load config start-position
@@ -55,6 +56,7 @@ func (pos *MongoPosition) LoadPosition(config *config.BaseConfig) {
 		}
 		pos.InitStartPosition = startPosition
 	}
+	return pos.InitStartPosition.Format("2006-01-02 15:04:05")
 }
 
 func (pos *MongoPosition) SavePosition() error {

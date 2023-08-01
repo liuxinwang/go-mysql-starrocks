@@ -33,7 +33,7 @@ type MysqlPositionV2 struct {
 	cancel       context.CancelFunc
 }
 
-func (pos *MysqlPositionV2) LoadPosition(conf *config.BaseConfig) {
+func (pos *MysqlPositionV2) LoadPosition(conf *config.BaseConfig) string {
 	var err error
 	pos.ctx, pos.cancel = context.WithCancel(context.Background())
 	// load pos info from db
@@ -74,7 +74,7 @@ func (pos *MysqlPositionV2) LoadPosition(conf *config.BaseConfig) {
 	pos.MysqlBasePositionV2 = basePos
 
 	if pos.BinlogGTID != "" {
-		return
+		return pos.BinlogGTID
 	}
 
 	// from local pos.info load
@@ -98,17 +98,19 @@ func (pos *MysqlPositionV2) LoadPosition(conf *config.BaseConfig) {
 		}
 		pos.MysqlBasePositionV2 = basePos
 		pos.FilePath = positionFilePath
-		return
+		return pos.BinlogGTID
 	}
 
 	// if binlogGTID is "", load config start-position
 	if conf.InputConfig.StartPosition != "" {
 		pos.BinlogGTID = conf.InputConfig.StartPosition
 	}
+	return pos.BinlogGTID
 }
 
 func (pos *MysqlPositionV2) initDb() {
-	r, err := pos.executeSQL("select 1 from information_schema.SCHEMATA where SCHEMA_NAME = ?", DbName)
+	r, err := pos.executeSQL("select"+
+		" 1 from information_schema.SCHEMATA where SCHEMA_NAME = ?", DbName)
 	if err != nil {
 		log.Fatalf("init position db `_go_mysql_sr` failed. err: %v", err.Error())
 	}
@@ -182,9 +184,11 @@ func (pos *MysqlPositionV2) initDb() {
 			"`pos_id` int(11) NOT NULL,"+
 			"`db` varchar(50) NOT NULL,"+
 			"`table_ddl` text,"+
+			"`ddl_pos` varchar(500),"+
 			"`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,"+
 			"`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,"+
-			"PRIMARY KEY (`id`))", DbName)
+			"PRIMARY KEY (`id`),"+
+			"UNIQUE KEY `uniq_posid_ddlpos` (`pos_id`,`ddl_pos`))", DbName)
 		_, err = pos.executeSQL(tidTaSql)
 		if err != nil {
 			log.Fatal("init `table_increment_ddl` table failed. err: ", err.Error())
