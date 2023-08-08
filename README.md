@@ -26,7 +26,7 @@ name = "mysql2starrocks"
 
 [input]
 type = "mysql"
-# 指定初次监听开始的gtid点位，当_xxx-pos.info点位文件内容存在时，此选项不生效
+# 指定初次监听开始的gtid点位，当position点位（_go_mysql_sr.positions.name）存在时，此选项不生效
 # start-gtid = "3ba13781-44eb-2157-88a5-0dc879ec2221:1-123456"
 
 [input.config.source] # mysql连接信息
