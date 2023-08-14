@@ -14,4 +14,7 @@ type Plugin interface {
 	AddRule(map[string]interface{}) error
 	DeleteRule(map[string]interface{}) error
 	GetRules() interface{}
+	Pause() error
+	Resume() error
+	IsPaused() bool
 }

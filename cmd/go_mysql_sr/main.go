@@ -160,6 +160,8 @@ func main() {
 	http.HandleFunc("/api/addRule", api.AddRuleHandle(ip, oo))
 	http.HandleFunc("/api/delRule", api.DelRuleHandle(ip, oo))
 	http.HandleFunc("/api/getRule", api.GetRuleHandle(oo))
+	http.HandleFunc("/api/pause", api.PauseHandle(oo))
+	http.HandleFunc("/api/resume", api.ResumeHandle(oo))
 
 	select {
 	case n := <-sc:

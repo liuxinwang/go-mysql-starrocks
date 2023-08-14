@@ -39,6 +39,9 @@ type Starrocks struct {
 	wg            sync.WaitGroup
 	ctx           context.Context
 	cancel        context.CancelFunc
+	pauseC        chan bool
+	resumeC       chan bool
+	paused        bool
 }
 
 func (sr *Starrocks) NewOutput(outputConfig interface{}, rulesMap map[string]interface{}, inSchema schema.Schema) {
@@ -65,6 +68,9 @@ func (sr *Starrocks) NewOutput(outputConfig interface{}, rulesMap map[string]int
 		log.Fatal(err)
 	}
 	sr.inSchema = inSchema
+	sr.pauseC = make(chan bool, 1)
+	sr.resumeC = make(chan bool, 1)
+	sr.paused = false
 }
 
 func (sr *Starrocks) StartOutput(outputChan *channel.OutputChannel) {
@@ -107,6 +113,14 @@ func (sr *Starrocks) StartOutput(outputChan *channel.OutputChannel) {
 			sr.close = true
 		case <-ticker.C:
 			needFlush = true
+		case <-sr.pauseC:
+			sr.paused = true
+			<-sr.resumeC
+			select {
+			default:
+				sr.paused = false
+				continue
+			}
 		}
 
 		if needFlush {
@@ -434,4 +448,18 @@ func (sr *Starrocks) ExecuteSQL(cmd string, args ...interface{}) (rr *mysql.Resu
 		}
 	}
 	return
+}
+
+func (sr *Starrocks) Pause() error {
+	sr.pauseC <- true
+	return nil
+}
+
+func (sr *Starrocks) Resume() error {
+	sr.resumeC <- true
+	return nil
+}
+
+func (sr *Starrocks) IsPaused() bool {
+	return sr.paused
 }

@@ -39,6 +39,9 @@ type Doris struct {
 	wg            sync.WaitGroup
 	ctx           context.Context
 	cancel        context.CancelFunc
+	pauseC        chan bool
+	resumeC       chan bool
+	paused        bool
 }
 
 var DeleteCondition = fmt.Sprintf("%s=1", DeleteColumn)
@@ -67,6 +70,9 @@ func (ds *Doris) NewOutput(outputConfig interface{}, rulesMap map[string]interfa
 		log.Fatal(err)
 	}
 	ds.inSchema = inSchema
+	ds.pauseC = make(chan bool, 1)
+	ds.resumeC = make(chan bool, 1)
+	ds.paused = false
 }
 
 func (ds *Doris) StartOutput(outputChan *channel.OutputChannel) {
@@ -109,6 +115,14 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel) {
 			ds.close = true
 		case <-ticker.C:
 			needFlush = true
+		case <-ds.pauseC:
+			ds.paused = true
+			<-ds.resumeC
+			select {
+			default:
+				ds.paused = false
+				continue
+			}
 		}
 
 		if needFlush {
@@ -455,4 +469,18 @@ func (ds *Doris) datetimeHandle(ev *msg.Msg, table *schema.Table) error {
 		}
 	}
 	return nil
+}
+
+func (ds *Doris) Pause() error {
+	ds.pauseC <- true
+	return nil
+}
+
+func (ds *Doris) Resume() error {
+	ds.resumeC <- true
+	return nil
+}
+
+func (ds *Doris) IsPaused() bool {
+	return ds.paused
 }
