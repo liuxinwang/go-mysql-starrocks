@@ -183,6 +183,19 @@ curl -s localhost:6166/api/getRule | python -m json.tool
     }
 }
 ```
+
+8.4 暂停同步
+```shell
+curl localhost:6166/api/pause
+```
+*result: pause handle successfully.*
+
+8.5 恢复同步
+```shell
+curl localhost:6166/api/resume
+```
+*result: resume handle successfully.*
+
 *注意：通过api修改不会持久化到配置文件。*
 
 -----------
