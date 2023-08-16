@@ -157,7 +157,7 @@ func main() {
 	go oo.StartOutput(outputChan)
 
 	// api handle
-	http.HandleFunc("/api/addRule", api.AddRuleHandle(ip, oo))
+	http.HandleFunc("/api/addRule", api.AddRuleHandle(ip, oo, inSchema))
 	http.HandleFunc("/api/delRule", api.DelRuleHandle(ip, oo))
 	http.HandleFunc("/api/getRule", api.GetRuleHandle(oo))
 	http.HandleFunc("/api/pause", api.PauseHandle(oo))

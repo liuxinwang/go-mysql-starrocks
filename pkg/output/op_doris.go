@@ -188,7 +188,7 @@ func (ds *Doris) Execute(msgs []*msg.Msg, table *schema.Table, targetSchema stri
 		log.Debugf("doris custom %s.%s row data: %v", targetSchema, targetTable, s)
 	}
 	//TODO ignoreColumns handle
-	return ds.sendData(jsonList, table, targetSchema, targetTable, nil)
+	return ds.SendData(jsonList, table, targetSchema, targetTable, nil)
 }
 
 func (ds *Doris) Close() {
@@ -319,7 +319,7 @@ func (ds *Doris) generateJSON(msgs []*msg.Msg, table *schema.Table) []string {
 	return jsonList
 }
 
-func (ds *Doris) sendData(content []string, table *schema.Table, targetSchema string, targetTable string, ignoreColumns []string) error {
+func (ds *Doris) SendData(content []string, table *schema.Table, targetSchema string, targetTable string, ignoreColumns []string) error {
 	cli := &http.Client{
 		/** CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			req.Header.Add("Authorization", "Basic "+sr.auth())

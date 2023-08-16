@@ -186,7 +186,7 @@ func (sr *Starrocks) Execute(msgs []*msg.Msg, table *schema.Table, targetSchema 
 	for _, s := range jsonList {
 		log.Debugf("starrocks custom %s.%s row data: %v", targetSchema, targetTable, s)
 	}
-	return sr.sendData(jsonList, table, targetSchema, targetTable, nil)
+	return sr.SendData(jsonList, table, targetSchema, targetTable, nil)
 }
 
 func (sr *Starrocks) Close() {
@@ -310,7 +310,7 @@ func (sr *Starrocks) generateJSON(msgs []*msg.Msg) []string {
 	return jsonList
 }
 
-func (sr *Starrocks) sendData(content []string, table *schema.Table, targetSchema string, targetTable string, ignoreColumns []string) error {
+func (sr *Starrocks) SendData(content []string, table *schema.Table, targetSchema string, targetTable string, ignoreColumns []string) error {
 	cli := &http.Client{
 		/** CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			req.Header.Add("Authorization", "Basic "+sr.auth())

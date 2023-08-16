@@ -3,16 +3,22 @@ package api
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/go-mysql-org/go-mysql/client"
+	"github.com/go-mysql-org/go-mysql/mysql"
+	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/input"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/output"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/siddontang/go-log/log"
 	"io/ioutil"
 	"net/http"
 	"regexp"
+	"strconv"
+	"strings"
 )
 
-func AddRuleHandle(ip input.Plugin, oo output.Plugin) func(http.ResponseWriter, *http.Request) {
+func AddRuleHandle(ip input.Plugin, oo output.Plugin, schema schema.Schema) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// read input param
 		var addRuleMap = make(map[string]interface{}, 1)
@@ -34,6 +40,30 @@ func AddRuleHandle(ip input.Plugin, oo output.Plugin) func(http.ResponseWriter, 
 				return
 			}
 			return
+		}
+
+		isFullSync := false
+		fullSync, ok := addRuleMap["full_sync"]
+		if ok {
+			switch fullSync.(type) {
+			case bool:
+				isFullSync, err = strconv.ParseBool(fmt.Sprintf("%v", fullSync))
+				if err != nil {
+					_, err = w.Write([]byte(fmt.Sprintf("result: full_sync incorrect type failed err: %v\n", err.Error())))
+					if err != nil {
+						log.Errorf("http response write err: ", err.Error())
+						return
+					}
+					return
+				}
+			default:
+				_, err = w.Write([]byte(fmt.Sprintf("result: param 'full_sync' incorrect type failed\n")))
+				if err != nil {
+					log.Errorf("http response write err: ", err.Error())
+					return
+				}
+				return
+			}
 		}
 
 		// output rule map add
@@ -64,76 +94,47 @@ func AddRuleHandle(ip input.Plugin, oo output.Plugin) func(http.ResponseWriter, 
 		log.Infof("add rule includeTableRegex: %v", reg.String())
 		log.Infof("add rule successfully")
 
+		if isFullSync {
+			err = oo.Pause()
+			log.Infof("pause output write")
+			if err != nil {
+				_, err = w.Write([]byte(fmt.Sprintf("result: pause err: %v\n", err.Error())))
+				if err != nil {
+					log.Errorf("http response write err: ", err.Error())
+					return
+				}
+				return
+			}
+
+			// waiting handle full sync
+			err = FullSync(ip, oo, addRuleMap, schema)
+			if err != nil {
+				_, err := w.Write([]byte(fmt.Sprintf("result: add rule full sync handle failed err: %v\n", err.Error())))
+				if err != nil {
+					log.Errorf("http response write err: ", err.Error())
+					return
+				}
+				return
+			}
+
+			err = oo.Resume()
+			if err != nil {
+				_, err = w.Write([]byte(fmt.Sprintf("result: resume err: %v\n", err.Error())))
+				if err != nil {
+					log.Errorf("http response write err: ", err.Error())
+					return
+				}
+				return
+			}
+			log.Infof("resume output write")
+		}
+
 		// result http msg
 		_, err = w.Write([]byte("result: add rule handle successfully.\n"))
 		if err != nil {
 			log.Errorf("http response write err: ", err.Error())
 			return
 		}
-		/**
-		// handle full data sync
-		switch inputPlugin := ip.(type) {
-		case *input.MysqlInputPlugin:
-			// 创建go_mysql_sr_表， example：CREATE TABLE go_ods_case_info_mysql_sr_ LIKE ods_case_info;
-			sourceSchema := addRuleMap["source-schema"]
-			targetSchema := addRuleMap["target-schema"]
-			sourceTable := addRuleMap["source-table"]
-			targetTable := addRuleMap["target-table"]
-			createSql := fmt.Sprintf("CREATE TABLE %s.go_%s_mysql_sr_ LIKE %s", targetSchema, targetTable, targetTable)
-			switch outputPlugin := oo.(type) {
-			case *output.Doris:
-				_, err := outputPlugin.ExecuteSQL(createSql)
-				if err != nil {
-					log.Errorf("execute sql: %s failed, err: %v", createSql, err.Error())
-					return
-				}
-				// 同步历史全量数据
-				// init conn
-				conn, err := client.Connect(fmt.Sprintf("%s:%d", inputPlugin.Host, inputPlugin.Port),
-					inputPlugin.UserName, inputPlugin.Password, "", func(c *client.Conn) { c.SetCharset("utf8") })
-				if err != nil {
-					log.Errorf("add rule init conn failed. err: ", err.Error())
-					return
-				}
-				// get primary key
-				primarySql := fmt.Sprintf("SELECT COLUMN_NAME, DATA_TYPE "+
-					"FROM INFORMATION_SCHEMA.COLUMNS "+
-					"WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s' AND COLUMN_KEY = 'PRI'", sourceSchema, sourceTable)
-				rs, err := conn.Execute(primarySql)
-				if err != nil {
-					log.Errorf("add rule get primary key failed. err: ", err.Error())
-					return
-				}
-				if rs.RowNumber() > 1 {
-					log.Errorf("handling multiple primary keys is not currently supported")
-					return
-				}
-				primaryKeyColumnName, _ := rs.GetString(0, 0)
-				primaryKeyDataType, _ := rs.GetString(0, 1)
-				if !strings.Contains(primaryKeyDataType, "int") {
-					log.Errorf("handling primary key not int type is not currently supported")
-					return
-				}
-				// get min key value
-
-			case *output.Starrocks:
-				_, err := outputPlugin.ExecuteSQL(createSql)
-				if err != nil {
-					log.Errorf("execute sql: %s failed, err: %v", createSql, err.Error())
-				}
-			}
-				-- 同步历史全量数据
-
-				-- 通过insert into select 把增量数据覆盖到go_mysql_sr_表
-				insert into go_ods_case_info_mysql_sr_ select * from ods_case_info;
-				-- 备份增量表
-				ALTER TABLE ods_case_info RENAME go_ods_case_info_del_bak_mysql_sr_;
-				-- 重命名go_mysql_sr_表
-				ALTER TABLE go_ods_case_info_mysql_sr_ RENAME ods_case_info;
-				-- 删除备份增量表
-				DROP TABLE go_ods_case_info_del_bak_mysql_sr_;
-		}
-		*/
 		return
 	}
 }
@@ -249,4 +250,149 @@ func ResumeHandle(oo output.Plugin) func(http.ResponseWriter, *http.Request) {
 		}
 		return
 	}
+}
+
+func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{}, s schema.Schema) error {
+	// handle full data sync
+	log.Infof("start handle full data sync...")
+	switch inputPlugin := ip.(type) {
+	case *input.MysqlInputPlugin:
+		sourceSchema := fmt.Sprintf("%v", ruleMap["source-schema"])
+		targetSchema := fmt.Sprintf("%v", ruleMap["target-schema"])
+		sourceTable := fmt.Sprintf("%v", ruleMap["source-table"])
+		targetTable := fmt.Sprintf("%v", ruleMap["target-table"])
+		// 同步历史全量数据
+		// init conn
+		conn, err := client.Connect(fmt.Sprintf("%s:%d", inputPlugin.Host, inputPlugin.Port),
+			inputPlugin.UserName, inputPlugin.Password, "", func(c *client.Conn) { c.SetCharset("utf8") })
+		if err != nil {
+			log.Errorf("rule map init conn failed. err: ", err.Error())
+			return err
+		}
+		// get primary key
+		primarySql := fmt.Sprintf("SELECT COLUMN_NAME, DATA_TYPE "+
+			"FROM INFORMATION_SCHEMA.COLUMNS "+
+			"WHERE TABLE_SCHEMA = '%s' AND TABLE_NAME = '%s' AND COLUMN_KEY = 'PRI'", sourceSchema, sourceTable)
+		rs, err := conn.Execute(primarySql)
+		if err != nil {
+			log.Errorf("add rule get primary key failed. err: ", err.Error())
+			return err
+		}
+		if rs.RowNumber() > 1 {
+			log.Errorf("handling multiple primary keys is not currently supported")
+			return errors.New("handling multiple primary keys is not currently supported")
+		}
+		primaryKeyColumnName, _ := rs.GetString(0, 0)
+		primaryKeyDataType, _ := rs.GetString(0, 1)
+		if !strings.Contains(primaryKeyDataType, "int") {
+			log.Errorf("handling primary key not int type is not currently supported")
+			return errors.New("handling primary key not int type is not currently supported")
+		}
+		queryColumnsSql := fmt.Sprintf("SELECT COLUMN_NAME "+
+			"FROM information_schema.columns "+
+			"WHERE table_schema = '%s' "+
+			"AND table_name = '%s' ORDER BY ORDINAL_POSITION", sourceSchema, sourceTable)
+		rs, err = conn.Execute(queryColumnsSql)
+		if err != nil {
+			log.Errorf("add rule get columns failed. err: ", err.Error())
+			return err
+		}
+		var columns []string
+		for i := 0; i < rs.RowNumber(); i++ {
+			columnName, _ := rs.GetString(i, 0)
+			columns = append(columns, columnName)
+		}
+		querySql := fmt.Sprintf("SELECT * "+
+			"FROM %s.%s ORDER BY %s", sourceSchema, sourceTable, primaryKeyColumnName)
+		var result mysql.Result
+		batchSize := 10000
+		tmpIndex := 0
+		var jsonRows []string
+		tableObj, err := s.GetTable(sourceSchema, sourceTable)
+		if err != nil {
+			return err
+		}
+		switch outputPlugin := oo.(type) {
+		case *output.Doris:
+			err = conn.ExecuteSelectStreaming(querySql, &result, func(row []mysql.FieldValue) error {
+				m := make(map[string]interface{})
+				for idx, val := range row {
+					ret := val.Value()
+					if val.Type == 4 {
+						_, ok := val.Value().([]uint8)
+						if ok {
+							ret = string(val.Value().([]uint8))
+						}
+					}
+					m[columns[idx]] = ret
+				}
+				m[output.DeleteColumn] = 0
+				b, _ := json.Marshal(m)
+				jsonRows = append(jsonRows, string(b))
+				tmpIndex += 1
+				if tmpIndex%batchSize == 0 {
+					err = outputPlugin.SendData(jsonRows, tableObj, targetSchema, targetTable, nil)
+					if err != nil {
+						return err
+					}
+					jsonRows = jsonRows[0:0]
+				}
+				return nil
+			}, nil)
+
+			if err != nil {
+				log.Errorf("handling execute select streaming failed. err: %v", err.Error())
+				return err
+			}
+
+			if len(jsonRows) > 0 {
+				err = outputPlugin.SendData(jsonRows, tableObj, targetSchema, targetTable, nil)
+				if err != nil {
+					return err
+				}
+			}
+		case *output.Starrocks:
+			err = conn.ExecuteSelectStreaming(querySql, &result, func(row []mysql.FieldValue) error {
+				m := make(map[string]interface{})
+				for idx, val := range row {
+					ret := val.Value()
+					if val.Type == 4 {
+						_, ok := val.Value().([]uint8)
+						if ok {
+							ret = string(val.Value().([]uint8))
+						}
+					}
+					m[columns[idx]] = ret
+				}
+				m[output.DeleteColumn] = 0
+				b, _ := json.Marshal(m)
+				jsonRows = append(jsonRows, string(b))
+				tmpIndex += 1
+				if tmpIndex%batchSize == 0 {
+					err = outputPlugin.SendData(jsonRows, tableObj, targetSchema, targetTable, nil)
+					if err != nil {
+						return err
+					}
+					jsonRows = jsonRows[0:0]
+				}
+				return nil
+			}, nil)
+
+			if err != nil {
+				log.Errorf("handling execute select streaming failed. err: %v", err.Error())
+				return err
+			}
+
+			if len(jsonRows) > 0 {
+				err = outputPlugin.SendData(jsonRows, tableObj, targetSchema, targetTable, nil)
+				if err != nil {
+					return err
+				}
+			}
+		default:
+			// TODO
+		}
+	}
+	log.Infof("end handle full data sync")
+	return nil
 }
