@@ -392,6 +392,7 @@ func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{},
 		default:
 			// TODO
 		}
+		log.Infof("full data sync total rows: %d", tmpIndex)
 	}
 	log.Infof("end handle full data sync")
 	return nil
