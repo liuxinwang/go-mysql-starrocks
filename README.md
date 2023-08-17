@@ -137,12 +137,20 @@ scrape_configs:
 ![](docs/img/grafana.png)
 
 #### 8. API
-8.1 新增同步表
+8.1 新增同步表（增量）
 ```shell
+# 增量同步
 curl localhost:6166/api/addRule -d '{"source-schema": "mysql_test","source-table": "tb3", "target-schema": "starrocks_test", "target-table": "tb3"}'
 ```
 *result: add rule handle successfully.*
 
+8.1 新增同步表（全量+增量）
+```shell
+# 需要指定同步参数 full_sync: true
+# 当指定full_sync为true时，新增同步表全量数据同步期间会暂停整个同步任务的output write，延迟会增加，等新增同步表全量写入完成后output write恢复；延迟多少跟新增同步表的数据量有关
+curl localhost:6166/api/addRule -d '{"source-schema": "mysql_test","source-table": "tb3", "target-schema": "starrocks_test", "target-table": "tb3", "full_sync": true}'
+```
+*result: add rule handle successfully.*
 
 8.2 删除同步表
 ```shell
