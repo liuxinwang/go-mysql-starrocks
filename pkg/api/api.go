@@ -114,6 +114,18 @@ func AddRuleHandle(ip input.Plugin, oo output.Plugin, schema schema.Schema) func
 					log.Errorf("http response write err: ", err.Error())
 					return
 				}
+
+				err = oo.Resume()
+				if err != nil {
+					_, err = w.Write([]byte(fmt.Sprintf("result: resume err: %v\n", err.Error())))
+					if err != nil {
+						log.Errorf("http response write err: ", err.Error())
+						return
+					}
+					return
+				}
+				log.Infof("resume output write")
+
 				return
 			}
 
@@ -269,6 +281,8 @@ func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{},
 			log.Errorf("rule map init conn failed. err: ", err.Error())
 			return err
 		}
+		// bug fix: c.SetCharset no set utf8mb4, separate set utf8mb4 support emoji
+		_, _ = conn.Execute("set names utf8mb4")
 		// get primary key
 		primarySql := fmt.Sprintf("SELECT COLUMN_NAME, DATA_TYPE "+
 			"FROM INFORMATION_SCHEMA.COLUMNS "+
