@@ -407,6 +407,11 @@ func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{},
 			// TODO
 		}
 		log.Infof("full data sync total rows: %d", tmpIndex)
+		err = conn.Close()
+		if err != nil {
+			return err
+		}
+		log.Infof("close conn")
 	}
 	log.Infof("end handle full data sync")
 	return nil
