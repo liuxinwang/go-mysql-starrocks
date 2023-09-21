@@ -16,3 +16,15 @@ func (mc *MysqlConfig) NewInputSourceConfig(config map[string]interface{}) {
 func (mc *MysqlConfig) GetInputSourceConfig() interface{} {
 	return mc
 }
+
+func (mc *MysqlConfig) NewOutputTargetConfig(config map[string]interface{}) {
+	var target = config["target"]
+	err := mapstructure.Decode(target, mc)
+	if err != nil {
+		log.Fatal("output.target config parsing failed. err: %v", err.Error())
+	}
+}
+
+func (mc *MysqlConfig) GetOutputTargetConfig() interface{} {
+	return mc
+}

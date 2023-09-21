@@ -57,7 +57,7 @@ flush-delay-second = 10
 #cast-as = ["json", "arrayJson"] # json示例: {"id": 1, "name": 'zhangsan'}, arrayJson示例: [{"id": 1, "name": 'zhangsan'}, {"id": 1, "name": 'lisi'}]
 
 #[[filter]]
-#type = "rename-dml-column"
+#type = "rename-dml-column" # 重命名列
 #[filter.config]
 #match-schema = "mysql_test"
 #match-table = "tb1"

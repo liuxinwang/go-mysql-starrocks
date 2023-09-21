@@ -5,6 +5,7 @@ go 1.19
 require (
 	github.com/BurntSushi/toml v1.3.0
 	github.com/dolthub/go-mysql-server v0.16.0
+	github.com/dop251/goja v0.0.0-20230828202809-3dbe69dd2b8e
 	github.com/go-demo/version v0.0.0-20200109120206-2cde9473fd92
 	github.com/go-mysql-org/go-mysql v1.6.0
 	github.com/iancoleman/strcase v0.2.0
@@ -25,15 +26,18 @@ require (
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cespare/xxhash v1.1.0 // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
+	github.com/dlclark/regexp2 v1.7.0 // indirect
 	github.com/dolthub/flatbuffers/v23 v23.3.3-dh.2 // indirect
 	github.com/dolthub/go-icu-regex v0.0.0-20230524105445-af7e7991c97e // indirect
 	github.com/dolthub/jsonpath v0.0.2-0.20230525180605-8dc13778fd72 // indirect
 	github.com/dolthub/vitess v0.0.0-20230622172940-39f2d1480fcb // indirect
 	github.com/go-kit/kit v0.10.0 // indirect
+	github.com/go-sourcemap/sourcemap v2.1.3+incompatible // indirect
 	github.com/go-sql-driver/mysql v1.6.0 // indirect
 	github.com/gocraft/dbr/v2 v2.7.2 // indirect
 	github.com/golang/protobuf v1.5.3 // indirect
 	github.com/golang/snappy v0.0.1 // indirect
+	github.com/google/pprof v0.0.0-20230207041349-798e818bf904 // indirect
 	github.com/google/uuid v1.3.0 // indirect
 	github.com/hashicorp/golang-lru v0.5.4 // indirect
 	github.com/kardianos/osext v0.0.0-20190222173326-2bc1f35cddc0 // indirect

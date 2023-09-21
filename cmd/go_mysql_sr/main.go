@@ -116,6 +116,12 @@ func main() {
 		rr = &rule.StarrocksRules{}
 		// 初始化output插件实例
 		oo = &output.Starrocks{}
+	case "mysql":
+		otc = &config.MysqlConfig{}
+		// 初始化rule配置
+		rr = &rule.MysqlRules{}
+		// 初始化output插件实例
+		oo = &output.Mysql{}
 	}
 	otc.NewOutputTargetConfig(baseConfig.OutputConfig.Config)
 	rr.NewRule(baseConfig.OutputConfig.Config)
@@ -138,8 +144,8 @@ func main() {
 		inSchema = &schema.MongoTables{}
 	}
 	isc.NewInputSourceConfig(baseConfig.InputConfig.Config)
-	position := pos.LoadPosition(baseConfig)
-	inSchema.NewSchemaTables(baseConfig, baseConfig.InputConfig.Config["source"], position)
+	positionData := pos.LoadPosition(baseConfig)
+	inSchema.NewSchemaTables(baseConfig, baseConfig.InputConfig.Config["source"], positionData)
 
 	oo.NewOutput(otc, rr.GetRuleToMap(), inSchema)
 	ip.NewInput(isc, rr.GetRuleToRegex(), inSchema)

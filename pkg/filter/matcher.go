@@ -39,6 +39,12 @@ func NewMatcherFilter(filterConfigs []*config.FilterConfig) MatcherFilter {
 				log.Fatal(err)
 			}
 			matcher = append(matcher, rdcf)
+		case JsDmlColumnFilterName:
+			jdcf := &JsDmlColumnFilter{}
+			if err := jdcf.NewFilter(fc.Config); err != nil {
+				log.Fatal(err)
+			}
+			matcher = append(matcher, jdcf)
 		default:
 			log.Warnf("filter: %s unhandled will not take effect.", typ)
 		}
