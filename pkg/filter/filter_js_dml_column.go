@@ -38,8 +38,12 @@ func (jdcf *JsDmlColumnFilter) NewFilter(config map[string]interface{}) error {
 
 func (jdcf *JsDmlColumnFilter) Filter(msg *msg.Msg) bool {
 	if jdcf.matchSchema == msg.Database && jdcf.matchTable == msg.Table {
+		value, ok := msg.DmlMsg.Data["id"]
+		if ok {
+			msg.DmlMsg.Data["id"] = fmt.Sprintf("%v", value)
+		}
 		rs := jdcf.processRow(msg.DmlMsg.Data)
-		if rs != nil {
+		if rs == nil {
 			return true
 		}
 		var res map[string]interface{}

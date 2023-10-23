@@ -56,6 +56,7 @@ func (m *Mysql) NewOutput(outputConfig interface{}, rulesMap map[string]interfac
 	m.StartMetrics()
 	// init conn
 	m.conn, err = client.Connect(fmt.Sprintf("%s:%d", m.Host, m.Port), m.UserName, m.Password, "")
+	_ = m.conn.SetCharset("utf8mb4")
 	if err != nil {
 		log.Fatal("output config conn failed. err: ", err.Error())
 	}
