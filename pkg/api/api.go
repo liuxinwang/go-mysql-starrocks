@@ -94,6 +94,7 @@ func AddRuleHandle(ip input.Plugin, oo output.Plugin, schema schema.Schema) func
 		log.Infof("add rule includeTableRegex: %v", reg.String())
 		log.Infof("add rule successfully")
 
+		syncRows := 0
 		if isFullSync {
 			err = oo.Pause()
 			log.Infof("pause output write")
@@ -107,9 +108,11 @@ func AddRuleHandle(ip input.Plugin, oo output.Plugin, schema schema.Schema) func
 			}
 
 			// waiting handle full sync
-			err = FullSync(ip, oo, addRuleMap, schema)
+			err, syncRows = FullSync(ip, oo, addRuleMap, schema)
 			if err != nil {
-				_, err := w.Write([]byte(fmt.Sprintf("result: add rule full sync handle failed err: %v\n", err.Error())))
+				_, err := w.Write([]byte(fmt.Sprintf(
+					"result: add rule full sync handle failed err: %v, full sync rows: %d\n",
+					err.Error(), syncRows)))
 				if err != nil {
 					log.Errorf("http response write err: ", err.Error())
 					return
@@ -142,11 +145,21 @@ func AddRuleHandle(ip input.Plugin, oo output.Plugin, schema schema.Schema) func
 		}
 
 		// result http msg
-		_, err = w.Write([]byte("result: add rule handle successfully.\n"))
-		if err != nil {
-			log.Errorf("http response write err: ", err.Error())
-			return
+		if isFullSync {
+			_, err = w.Write([]byte(fmt.Sprintf(
+				"result: add rule handle successfully, full sync rows: %d.\n", syncRows)))
+			if err != nil {
+				log.Errorf("http response write err: ", err.Error())
+				return
+			}
+		} else {
+			_, err = w.Write([]byte("result: add rule handle successfully.\n"))
+			if err != nil {
+				log.Errorf("http response write err: ", err.Error())
+				return
+			}
 		}
+
 		return
 	}
 }
@@ -264,7 +277,7 @@ func ResumeHandle(oo output.Plugin) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{}, s schema.Schema) error {
+func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{}, s schema.Schema) (e error, fullRows int) {
 	// handle full data sync
 	log.Infof("start handle full data sync...")
 	switch inputPlugin := ip.(type) {
@@ -279,7 +292,7 @@ func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{},
 			inputPlugin.UserName, inputPlugin.Password, "", func(c *client.Conn) { c.SetCharset("utf8") })
 		if err != nil {
 			log.Errorf("rule map init conn failed. err: ", err.Error())
-			return err
+			return err, 0
 		}
 		// bug fix: c.SetCharset no set utf8mb4, separate set utf8mb4 support emoji
 		_, _ = conn.Execute("set names utf8mb4")
@@ -290,18 +303,32 @@ func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{},
 		rs, err := conn.Execute(primarySql)
 		if err != nil {
 			log.Errorf("add rule get primary key failed. err: ", err.Error())
-			return err
+			return err, 0
 		}
-		if rs.RowNumber() > 1 {
+
+		if rs.RowNumber() == 0 {
+			log.Errorf("handling not primary keys table is not currently supported")
+			return errors.New("handling not primary keys table is not currently supported"), 0
+		}
+
+		var primaryKeyColumns []string
+		for i := 0; i < rs.RowNumber(); i++ {
+			columnName, _ := rs.GetString(i, 0)
+			primaryKeyColumns = append(primaryKeyColumns, columnName)
+		}
+
+		/* if rs.RowNumber() > 1 {
 			log.Errorf("handling multiple primary keys is not currently supported")
 			return errors.New("handling multiple primary keys is not currently supported")
 		}
+
 		primaryKeyColumnName, _ := rs.GetString(0, 0)
 		primaryKeyDataType, _ := rs.GetString(0, 1)
 		if !strings.Contains(primaryKeyDataType, "int") {
 			log.Errorf("handling primary key not int type is not currently supported")
 			return errors.New("handling primary key not int type is not currently supported")
-		}
+		} */
+
 		queryColumnsSql := fmt.Sprintf("SELECT COLUMN_NAME "+
 			"FROM information_schema.columns "+
 			"WHERE table_schema = '%s' "+
@@ -309,7 +336,7 @@ func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{},
 		rs, err = conn.Execute(queryColumnsSql)
 		if err != nil {
 			log.Errorf("add rule get columns failed. err: ", err.Error())
-			return err
+			return err, 0
 		}
 		var columns []string
 		for i := 0; i < rs.RowNumber(); i++ {
@@ -317,14 +344,14 @@ func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{},
 			columns = append(columns, columnName)
 		}
 		querySql := fmt.Sprintf("SELECT * "+
-			"FROM %s.%s ORDER BY %s", sourceSchema, sourceTable, primaryKeyColumnName)
+			"FROM %s.%s ORDER BY %s", sourceSchema, sourceTable, strings.Join(primaryKeyColumns, ","))
 		var result mysql.Result
 		batchSize := 10000
 		tmpIndex := 0
 		var jsonRows []string
 		tableObj, err := s.GetTable(sourceSchema, sourceTable)
 		if err != nil {
-			return err
+			return err, 0
 		}
 		switch outputPlugin := oo.(type) {
 		case *output.Doris:
@@ -349,6 +376,7 @@ func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{},
 					if err != nil {
 						return err
 					}
+					fullRows = tmpIndex
 					jsonRows = jsonRows[0:0]
 				}
 				return nil
@@ -356,13 +384,13 @@ func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{},
 
 			if err != nil {
 				log.Errorf("handling execute select streaming failed. err: %v", err.Error())
-				return err
+				return err, tmpIndex
 			}
 
 			if len(jsonRows) > 0 {
 				err = outputPlugin.SendData(jsonRows, tableObj, targetSchema, targetTable, nil)
 				if err != nil {
-					return err
+					return err, tmpIndex
 				}
 			}
 		case *output.Starrocks:
@@ -387,6 +415,7 @@ func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{},
 					if err != nil {
 						return err
 					}
+					fullRows = tmpIndex
 					jsonRows = jsonRows[0:0]
 				}
 				return nil
@@ -394,13 +423,13 @@ func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{},
 
 			if err != nil {
 				log.Errorf("handling execute select streaming failed. err: %v", err.Error())
-				return err
+				return err, tmpIndex
 			}
 
 			if len(jsonRows) > 0 {
 				err = outputPlugin.SendData(jsonRows, tableObj, targetSchema, targetTable, nil)
 				if err != nil {
-					return err
+					return err, tmpIndex
 				}
 			}
 		default:
@@ -409,10 +438,10 @@ func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{},
 		log.Infof("full data sync total rows: %d", tmpIndex)
 		err = conn.Close()
 		if err != nil {
-			return err
+			return err, tmpIndex
 		}
 		log.Infof("close conn")
 	}
 	log.Infof("end handle full data sync")
-	return nil
+	return nil, fullRows
 }
