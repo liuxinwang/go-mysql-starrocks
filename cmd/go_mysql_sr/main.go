@@ -134,7 +134,7 @@ func main() {
 		ip = &input.MysqlInputPlugin{}
 		pos = &position.MysqlPositionV2{}
 		// init input schema
-		inSchema = &schema.MysqlTablesV2{}
+		inSchema = &schema.MysqlTablesV3{}
 	case "mongo":
 		isc = &config.MongoConfig{}
 		// 初始化input插件实例
@@ -145,7 +145,7 @@ func main() {
 	}
 	isc.NewInputSourceConfig(baseConfig.InputConfig.Config)
 	positionData := pos.LoadPosition(baseConfig)
-	inSchema.NewSchemaTables(baseConfig, baseConfig.InputConfig.Config["source"], positionData)
+	inSchema.NewSchemaTables(baseConfig, baseConfig.InputConfig.Config["source"], positionData, rr.GetRuleToMap())
 
 	oo.NewOutput(otc, rr.GetRuleToMap(), inSchema)
 	ip.NewInput(isc, rr.GetRuleToRegex(), inSchema)
@@ -164,7 +164,7 @@ func main() {
 
 	// api handle
 	http.HandleFunc("/api/addRule", api.AddRuleHandle(ip, oo, inSchema))
-	http.HandleFunc("/api/delRule", api.DelRuleHandle(ip, oo))
+	http.HandleFunc("/api/delRule", api.DelRuleHandle(ip, oo, inSchema))
 	http.HandleFunc("/api/getRule", api.GetRuleHandle(oo))
 	http.HandleFunc("/api/pause", api.PauseHandle(oo))
 	http.HandleFunc("/api/resume", api.ResumeHandle(oo))

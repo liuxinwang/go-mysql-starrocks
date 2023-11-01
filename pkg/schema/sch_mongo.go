@@ -25,7 +25,7 @@ type MongoTables struct {
 	cancel     context.CancelFunc
 }
 
-func (mts *MongoTables) NewSchemaTables(conf *config.BaseConfig, pluginConfig interface{}, startPos string) {
+func (mts *MongoTables) NewSchemaTables(conf *config.BaseConfig, pluginConfig interface{}, startPos string, rulesMap map[string]interface{}) {
 	mts.tables = make(map[string]*Table)
 	mts.MongoConfig = &config.MongoConfig{}
 	err := mapstructure.Decode(pluginConfig, mts.MongoConfig)
@@ -77,6 +77,10 @@ func (mts *MongoTables) AddTableForMsg(msg *msg.Msg) error {
 
 func (mts *MongoTables) AddTable(db string, table string) (*Table, error) {
 	return nil, nil
+}
+
+func (mts *MongoTables) DelTable(db string, table string) error {
+	return nil
 }
 
 func (mts *MongoTables) UpdateTable(db string, table string, args interface{}, pos string) (err error) {

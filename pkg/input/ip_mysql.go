@@ -226,7 +226,7 @@ func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replicatio
 	if err != nil {
 		log.Fatalf("parse query(%s) err %v", queryEvent.Query, err)
 	}
-	log.Infof("ddl event: %v", ddl)
+	log.Debugf("ddl event: %v", ddl)
 	for _, stmt := range stmts {
 		ns := mi.parseStmt(stmt)
 		for _, n := range ns {
@@ -237,13 +237,31 @@ func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replicatio
 				continue
 			}
 
-			// fix go-mysql-server not support column charset
-			reg, _ := regexp.Compile("charset \\w*")
-			ddl = reg.ReplaceAllString(ddl, "")
-
-			err = mi.inSchema.UpdateTable(n.db, n.table, ddl, gtid)
+			reg, err := regexp.Compile(rule.SchemaTableToStrRegex(n.db, n.table))
 			if err != nil {
-				log.Errorf("handle query(%s) err %v", queryEvent.Query, err)
+				log.Fatalf("parse schema table regexp err %v", err.Error())
+			}
+
+			isHandleDDL := false
+			for _, regex := range mi.canal.GetIncludeTableRegex() {
+				if regex.String() == reg.String() {
+					isHandleDDL = true
+					break
+				}
+			}
+
+			if isHandleDDL {
+				log.Infof("handle ddl event: %v", ddl)
+				// fix go-mysql-server not support column charset
+				reg, _ := regexp.Compile("charset \\w*")
+				ddl = reg.ReplaceAllString(ddl, "")
+
+				err = mi.inSchema.UpdateTable(n.db, n.table, ddl, gtid)
+				if err != nil {
+					log.Errorf("handle query(%s) err %v", queryEvent.Query, err)
+				}
+			} else {
+				log.Debugf("filter ddl event, ddl non-sync table, ddl: %v", ddl)
 			}
 		}
 	}

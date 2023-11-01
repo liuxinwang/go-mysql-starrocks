@@ -31,7 +31,7 @@ type MysqlTables struct {
 	FilePath string
 }
 
-func (mts *MysqlTables) NewSchemaTables(conf *config.BaseConfig, pluginConfig interface{}, startPos string) {
+func (mts *MysqlTables) NewSchemaTables(conf *config.BaseConfig, pluginConfig interface{}, startPos string, rulesMap map[string]interface{}) {
 	mts.MysqlTablesMeta = &MysqlTablesMeta{tables: make(map[string]*Table)}
 	mts.MysqlConfig = &config.MysqlConfig{}
 	err := mapstructure.Decode(pluginConfig, mts.MysqlConfig)
@@ -84,6 +84,10 @@ func (mts *MysqlTables) AddTable(db string, table string) (*Table, error) {
 	mts.tables[key] = ta
 	mts.tablesLock.Unlock()
 	return ta, nil
+}
+
+func (mts *MysqlTables) DelTable(db string, table string) error {
+	return nil
 }
 
 func (mts *MysqlTables) AddCreateTable(db string, table string, cols interface{}) error {

@@ -66,6 +66,20 @@ func AddRuleHandle(ip input.Plugin, oo output.Plugin, schema schema.Schema) func
 			}
 		}
 
+		// schema table add
+		sourceSchema := fmt.Sprintf("%v", addRuleMap["source-schema"])
+		sourceTable := fmt.Sprintf("%v", addRuleMap["source-table"])
+		_, err = schema.AddTable(sourceSchema, sourceTable)
+		if err != nil {
+			_, err := w.Write([]byte(fmt.Sprintf("result: add rule table meta handle failed err: %v\n", err.Error())))
+			if err != nil {
+				log.Errorf("http response write err: ", err.Error())
+				return
+			}
+			return
+		}
+		log.Infof("add schema table meta data: %v.%v", sourceSchema, sourceTable)
+
 		// output rule map add
 		err = oo.AddRule(addRuleMap)
 		if err != nil {
@@ -165,7 +179,7 @@ func AddRuleHandle(ip input.Plugin, oo output.Plugin, schema schema.Schema) func
 }
 
 // A DelRuleHandle for delete rule handle.
-func DelRuleHandle(ip input.Plugin, oo output.Plugin) func(http.ResponseWriter, *http.Request) {
+func DelRuleHandle(ip input.Plugin, oo output.Plugin, schema schema.Schema) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var delRule = make(map[string]interface{}, 1)
 		data, err := ioutil.ReadAll(r.Body)
@@ -201,8 +215,32 @@ func DelRuleHandle(ip input.Plugin, oo output.Plugin) func(http.ResponseWriter, 
 		log.Infof("delete rule includeTableRegex: %v", reg.String())
 
 		err = oo.DeleteRule(delRule)
+		if err != nil {
+			_, err := w.Write([]byte(fmt.Sprintf("result: delete rule table meta handle failed err: %v\n", err.Error())))
+			if err != nil {
+				log.Errorf("http response write err: ", err.Error())
+				return
+			}
+			return
+		}
 		delRuleFmt, _ := json.Marshal(delRule)
 		log.Infof("delete rule map: %v", string(delRuleFmt))
+
+		// schema table add
+		sourceSchema := fmt.Sprintf("%v", delRule["source-schema"])
+		sourceTable := fmt.Sprintf("%v", delRule["source-table"])
+		err = schema.DelTable(sourceSchema, sourceTable)
+		if err != nil {
+			_, err := w.Write([]byte(fmt.Sprintf("result: delete rule table meta handle failed err: %v\n", err.Error())))
+			if err != nil {
+				log.Errorf("http response write err: ", err.Error())
+				return
+			}
+			return
+		}
+
+		log.Infof("delete rule table meta: %v", string(delRuleFmt))
+
 		log.Infof("delete rule successfully")
 
 		_, err = w.Write([]byte("result: delete rule handle successfully.\n"))

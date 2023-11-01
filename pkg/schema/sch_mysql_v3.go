@@ -14,23 +14,23 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/position"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
 	"github.com/mitchellh/mapstructure"
 	"github.com/siddontang/go-log/log"
-	"regexp"
 	"strings"
 	"sync"
 	"time"
 )
 
-type MysqlTablesMetaV2 struct {
+type MysqlTablesMetaV3 struct {
 	tables map[string]*Table
 }
 
-type MysqlTablesV2 struct {
+type MysqlTablesV3 struct {
 	sync.RWMutex
 	*config.MysqlConfig
 	tablesLock sync.RWMutex
-	*MysqlTablesMetaV2
+	*MysqlTablesMetaV3
 	posId       int
 	connLock    sync.Mutex
 	conn        *client.Conn
@@ -42,8 +42,8 @@ type MysqlTablesV2 struct {
 	cancel      context.CancelFunc
 }
 
-func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig interface{}, startPos string, rulesMap map[string]interface{}) {
-	mts.MysqlTablesMetaV2 = &MysqlTablesMetaV2{tables: make(map[string]*Table)}
+func (mts *MysqlTablesV3) NewSchemaTables(conf *config.BaseConfig, pluginConfig interface{}, startPos string, rulesMap map[string]interface{}) {
+	mts.MysqlTablesMetaV3 = &MysqlTablesMetaV3{tables: make(map[string]*Table)}
 	mts.MysqlConfig = &config.MysqlConfig{}
 	err := mapstructure.Decode(pluginConfig, mts.MysqlConfig)
 	if err != nil {
@@ -65,6 +65,19 @@ func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 	mts.memConn, err = client.Connect(fmt.Sprintf("%s:%d", MemDbHost, MemDbPort), "", "", "")
 	if err != nil {
 		log.Fatalf("new schema tables conn failed. err: %v", err.Error())
+	}
+
+	// init tables
+	for k, _ := range rulesMap {
+		schemaName, tableName, err := rule.GetRuleKeySchemaTable(k)
+		if err != nil {
+			log.Fatalf("%v", err.Error())
+		}
+		table := &Table{
+			Schema: schemaName,
+			Name:   tableName,
+		}
+		mts.tables[k] = table
 	}
 
 	// if position exists, get position timestamp
@@ -101,9 +114,9 @@ func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 	var updatedAt string
 	if r.RowNumber() == 0 {
 		// from mts.tables init memory mysql server
-		marshal, err := json.Marshal(mts.LoadMetaFromDB())
+		marshal, err := json.Marshal(mts.LoadMetaFromDB(rulesMap))
 		if err != nil {
-			return
+			log.Fatalf("load meta from db error. err: %v", err.Error())
 		}
 		tablesMeta = string(marshal)
 
@@ -117,6 +130,39 @@ func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 		if err != nil {
 			log.Fatal("get last checkpoint data failed. err: ", err.Error())
 		}
+		// 对比tablesMeta和ruleMap，只加载ruleMap中有的
+		tablesMetaMap := make(map[string]interface{})
+		err := json.Unmarshal([]byte(tablesMeta), &tablesMetaMap)
+		if err != nil {
+			log.Fatalf("tables meta unmarshal map error. err: %v", err.Error())
+		}
+		tmpTablesMeta := make(map[string]interface{})
+		for k, _ := range rulesMap {
+			schemaName, tableName, err := rule.GetRuleKeySchemaTable(k)
+			if err != nil {
+				log.Fatalf("%v", err.Error())
+			}
+			key := fmt.Sprintf("%s.%s", schemaName, tableName)
+			if value, ok := tablesMetaMap[key]; ok {
+				tmpTablesMeta[key] = value
+				log.Debugf("from [meta] table load table meta for %v.%v", schemaName, tableName)
+			} else {
+				// from db load table meta
+				createDDL, err := mts.GetTableCreateDDL(schemaName, tableName)
+				if err != nil {
+					log.Fatalf("%v", err.Error())
+				}
+				tmpTablesMeta[key] = createDDL
+				log.Debugf("from [source db] load table meta for %v.%v", schemaName, tableName)
+			}
+		}
+
+		marshal, err := json.Marshal(tmpTablesMeta)
+		if err != nil {
+			log.Fatalf("load meta error. err: %v", err.Error())
+		}
+		tablesMeta = string(marshal)
+
 		updatedAt, _ = r.GetString(0, 1)
 	}
 
@@ -138,15 +184,16 @@ func (mts *MysqlTablesV2) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 			ddl, _ := idr.GetString(i, 1)
 			err = mts.incrementDdlExec(db, "", ddl)
 			if err != nil {
-				log.Errorf("handle increment ddl failed, ddl: %v, err: %v", ddl, err.Error())
+				log.Warnf("handle increment ddl failed, ddl: %v, err: %v", ddl, err.Error())
 			}
 		}
 		log.Infof("replay increment ddl done, exec ddl events: %d", idr.RowNumber())
 	}
-	mts.StartTimerSaveMeta(nil)
+
+	mts.StartTimerSaveMeta()
 }
 
-func (mts *MysqlTablesV2) newMemMyServer() {
+func (mts *MysqlTablesV3) newMemMyServer() {
 	// ctx := sql.NewEmptyContext()
 	engine := sqle.NewDefault(
 		memory.NewDBProvider(
@@ -167,19 +214,56 @@ func (mts *MysqlTablesV2) newMemMyServer() {
 	}
 }
 
-func (mts *MysqlTablesV2) AddTableForMsg(msg *msg.Msg) error {
+func (mts *MysqlTablesV3) AddTableForMsg(msg *msg.Msg) error {
 	return nil
 }
 
-func (mts *MysqlTablesV2) AddTable(db string, table string) (*Table, error) {
-	return nil, nil
+func (mts *MysqlTablesV3) AddTable(db string, table string) (*Table, error) {
+	ddl, err := mts.GetTableCreateDDL(db, table)
+	if err != nil {
+		return nil, err
+	}
+	if err := mts.memConn.UseDB(db); err != nil {
+		// db not found handle: create database
+		if strings.Contains(err.Error(), "database not found") {
+			log.Infof("memory db: database not found, create database %s", db)
+			err = mts.createDbForMemDB(db)
+			if err != nil {
+				return nil, err
+			}
+			if err = mts.memConn.UseDB(db); err != nil {
+				return nil, err
+			}
+		} else {
+			return nil, err
+		}
+	}
+	_ = mts.memConn.SetCharset("utf8")
+	_, err = mts.ExecuteSQLForMemDB(fmt.Sprintf("%v", ddl))
+	if err != nil {
+		return nil, err
+	}
+
+	t := &Table{
+		Schema: db,
+		Name:   table,
+	}
+	mts.tables[rule.RuleKeyFormat(db, table)] = t
+	return t, nil
 }
 
-func (mts *MysqlTablesV2) DelTable(db string, table string) error {
+func (mts *MysqlTablesV3) DelTable(db string, table string) (err error) {
+	delete(mts.tables, rule.RuleKeyFormat(db, table))
+
+	_ = mts.memConn.SetCharset("utf8")
+	_, err = mts.ExecuteSQLForMemDB(fmt.Sprintf("drop table %v.%v", db, table))
+	if err != nil {
+		return err
+	}
 	return nil
 }
 
-func (mts *MysqlTablesV2) GetTableCreateDDL(db string, table string) (string, error) {
+func (mts *MysqlTablesV3) GetTableCreateDDL(db string, table string) (string, error) {
 	r, err := mts.ExecuteSQL(fmt.Sprintf("show create table `%s`.`%s`", db, table))
 	if err != nil {
 		return "", err
@@ -191,7 +275,7 @@ func (mts *MysqlTablesV2) GetTableCreateDDL(db string, table string) (string, er
 	return createDDL, nil
 }
 
-func (mts *MysqlTablesV2) UpdateTable(db string, table string, ddl interface{}, pos string) (err error) {
+func (mts *MysqlTablesV3) UpdateTable(db string, table string, ddl interface{}, pos string) (err error) {
 	if err = mts.memConn.UseDB(db); err != nil {
 		// db not found handle: create database
 		if strings.Contains(err.Error(), "database not found") {
@@ -221,7 +305,7 @@ func (mts *MysqlTablesV2) UpdateTable(db string, table string, ddl interface{}, 
 	return nil
 }
 
-func (mts *MysqlTablesV2) createDbForMemDB(db string) (err error) {
+func (mts *MysqlTablesV3) createDbForMemDB(db string) (err error) {
 	_ = mts.memConn.SetCharset("utf8")
 	ddl := fmt.Sprintf("CREATE DATABASE IF NOT EXISTS `%s`", db)
 	_, err = mts.ExecuteSQLForMemDB(ddl)
@@ -231,7 +315,7 @@ func (mts *MysqlTablesV2) createDbForMemDB(db string) (err error) {
 	return nil
 }
 
-func (mts *MysqlTablesV2) incrementDdlExec(db string, table string, ddl interface{}) (err error) {
+func (mts *MysqlTablesV3) incrementDdlExec(db string, table string, ddl interface{}) (err error) {
 	if err = mts.memConn.UseDB(db); err != nil {
 		// db not found handle: create database
 		if strings.Contains(err.Error(), "database not found") {
@@ -254,7 +338,7 @@ func (mts *MysqlTablesV2) incrementDdlExec(db string, table string, ddl interfac
 	return nil
 }
 
-func (mts *MysqlTablesV2) GetTable(db string, table string) (*Table, error) {
+func (mts *MysqlTablesV3) GetTable(db string, table string) (*Table, error) {
 	sql := fmt.Sprintf(fmt.Sprintf("show full columns from `%s`.`%s`", db, table))
 	r, err := mts.ExecuteSQLForMemDB(sql)
 	if err != nil {
@@ -277,11 +361,11 @@ func (mts *MysqlTablesV2) GetTable(db string, table string) (*Table, error) {
 	return ta, nil
 }
 
-func (mts *MysqlTablesV2) RefreshTable(db string, table string) {
+func (mts *MysqlTablesV3) RefreshTable(db string, table string) {
 
 }
 
-func (mts *MysqlTablesV2) Close() {
+func (mts *MysqlTablesV3) Close() {
 	mts.cancel()
 	mts.wg.Wait()
 	log.Infof("close mysql save table meta ticker goroutine.")
@@ -294,7 +378,7 @@ func (mts *MysqlTablesV2) Close() {
 	}
 }
 
-func (mts *MysqlTablesV2) ExecuteSQL(cmd string, args ...interface{}) (rr *mysql.Result, err error) {
+func (mts *MysqlTablesV3) ExecuteSQL(cmd string, args ...interface{}) (rr *mysql.Result, err error) {
 	mts.connLock.Lock()
 	defer mts.connLock.Unlock()
 	argF := make([]func(*client.Conn), 0)
@@ -324,7 +408,7 @@ func (mts *MysqlTablesV2) ExecuteSQL(cmd string, args ...interface{}) (rr *mysql
 	return
 }
 
-func (mts *MysqlTablesV2) ExecuteSQLForMemDB(cmd string, args ...interface{}) (rr *mysql.Result, err error) {
+func (mts *MysqlTablesV3) ExecuteSQLForMemDB(cmd string, args ...interface{}) (rr *mysql.Result, err error) {
 	mts.memConnLock.Lock()
 	defer mts.memConnLock.Unlock()
 	argF := make([]func(*client.Conn), 0)
@@ -354,41 +438,51 @@ func (mts *MysqlTablesV2) ExecuteSQLForMemDB(cmd string, args ...interface{}) (r
 	return
 }
 
-func (mts *MysqlTablesV2) LoadMetaFromDB() map[string]interface{} {
+func (mts *MysqlTablesV3) LoadMetaFromDB(rulesMap map[string]interface{}) map[string]interface{} {
 	// load meta from db
 	log.Debugf("start load tables meta from db, waiting...")
 	createDDLMap := make(map[string]interface{})
-	// get schemas
-	schemaSql := "select schema_name FROM information_schema.schemata " +
-		"where schema_name not in ('mysql', 'sys', 'information_schema', 'performance_schema')"
-	r, err := mts.ExecuteSQL(schemaSql)
-	if err != nil {
-		log.Fatalf("%v", err)
-	}
-	for i := 0; i < r.RowNumber(); i++ {
-		schemaName, _ := r.GetString(i, 0)
-		// get schema tables
-		tableSql := fmt.Sprintf("select table_name from information_schema.tables "+
-			"where table_schema = '%s' and table_type = 'BASE TABLE'", schemaName)
-		rr, err := mts.ExecuteSQL(tableSql)
+	var tables []string
+	for k, _ := range rulesMap {
+		schemaName, tableName, err := rule.GetRuleKeySchemaTable(k)
 		if err != nil {
 			log.Fatalf("%v", err)
 		}
-		for j := 0; j < rr.RowNumber(); j++ {
-			tableName, _ := rr.GetString(j, 0)
-			createDDL, err := mts.GetTableCreateDDL(schemaName, tableName)
-			if err != nil {
-				log.Fatalf("%v", err)
-			}
-			key := fmt.Sprintf("%s.%s", schemaName, tableName)
-			createDDLMap[key] = createDDL
+		createDDL, err := mts.GetTableCreateDDL(schemaName, tableName)
+		if err != nil {
+			log.Fatalf("%v", err)
 		}
+		key := fmt.Sprintf("%s.%s", schemaName, tableName)
+		tables = append(tables, key)
+		createDDLMap[key] = createDDL
 	}
-	log.Debugf("end load tables meta from db: %v", mts.tables)
+	log.Debugf("end load tables meta from db: %v", tables)
 	return createDDLMap
 }
 
-func (mts *MysqlTablesV2) loadTablesMetaToMemDB(tablesMeta string) {
+func (mts *MysqlTablesV3) LoadSyncTableMetaFromDB() map[string]interface{} {
+	// load meta from db
+	log.Debugf("start load sync tables meta from db, waiting...")
+	createDDLMap := make(map[string]interface{})
+	var tables []string
+	for k, _ := range mts.tables {
+		schemaName, tableName, err := rule.GetRuleKeySchemaTable(k)
+		if err != nil {
+			log.Fatalf("%v", err)
+		}
+		createDDL, err := mts.GetTableCreateDDL(schemaName, tableName)
+		if err != nil {
+			log.Fatalf("%v", err)
+		}
+		key := fmt.Sprintf("%s.%s", schemaName, tableName)
+		tables = append(tables, key)
+		createDDLMap[key] = createDDL
+	}
+	log.Debugf("end load sync tables meta from db: %v", tables)
+	return createDDLMap
+}
+
+func (mts *MysqlTablesV3) loadTablesMetaToMemDB(tablesMeta string) {
 	tablesMetaMap := make(map[string]interface{})
 	err := json.Unmarshal([]byte(tablesMeta), &tablesMetaMap)
 	if err != nil {
@@ -412,7 +506,7 @@ func (mts *MysqlTablesV2) loadTablesMetaToMemDB(tablesMeta string) {
 	}
 }
 
-func (mts *MysqlTablesV2) SaveMeta(tablesMeta string) error {
+func (mts *MysqlTablesV3) SaveMeta(tablesMeta string) error {
 	// persistence now meta
 	mts.Lock()
 	defer mts.Unlock()
@@ -427,7 +521,7 @@ func (mts *MysqlTablesV2) SaveMeta(tablesMeta string) error {
 	return nil
 }
 
-func (mts *MysqlTablesV2) GetColumnTypeFromRawType(rawType string) int {
+func (mts *MysqlTablesV3) GetColumnTypeFromRawType(rawType string) int {
 	var columnType int
 	if strings.HasPrefix(rawType, "float") ||
 		strings.HasPrefix(rawType, "double") {
@@ -460,17 +554,17 @@ func (mts *MysqlTablesV2) GetColumnTypeFromRawType(rawType string) int {
 	return columnType
 }
 
-func (mts *MysqlTablesV2) StartTimerSaveMeta([]*regexp.Regexp) {
+func (mts *MysqlTablesV3) StartTimerSaveMeta() {
 	mts.wg.Add(1)
 	go func() {
 		defer mts.wg.Done()
-		ticker := time.NewTicker(time.Second * 86400) // 24h
+		ticker := time.NewTicker(time.Second * 180) // 24h
 		defer ticker.Stop()
 
 		for {
 			select {
 			case <-ticker.C:
-				marshal, err := json.Marshal(mts.LoadMetaFromDB())
+				marshal, err := json.Marshal(mts.LoadSyncTableMetaFromDB())
 				if err != nil {
 					log.Fatalf("save tables meta failed. err: ", err.Error())
 				}
@@ -489,7 +583,7 @@ func (mts *MysqlTablesV2) StartTimerSaveMeta([]*regexp.Regexp) {
 	}()
 }
 
-func (mts *MysqlTablesV2) getTimestampForGtid(gtid string) uint32 {
+func (mts *MysqlTablesV3) getTimestampForGtid(gtid string) uint32 {
 	// Create a binlog syncer with a unique server id, the server id must be different from other MySQL's.
 	// flavor is mysql or mariadb
 	cfg := replication.BinlogSyncerConfig{

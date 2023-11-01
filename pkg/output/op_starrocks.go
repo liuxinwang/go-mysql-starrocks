@@ -159,7 +159,7 @@ func (sr *Starrocks) StartOutput(outputChan *channel.OutputChannel) {
 				if err != nil {
 					log.Fatalf("ack msg failed: %v", errors.ErrorStack(err))
 				}
-				log.Debugf("after commit callback lastCtl: %v", sr.lastCtlMsg.InputContext)
+				// log.Debugf("after commit callback lastCtl: %v", sr.lastCtlMsg.InputContext)
 			} else {
 				log.Fatalf("not found AfterCommitCallback func")
 			}
