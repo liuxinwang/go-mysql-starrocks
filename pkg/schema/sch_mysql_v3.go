@@ -558,7 +558,7 @@ func (mts *MysqlTablesV3) StartTimerSaveMeta() {
 	mts.wg.Add(1)
 	go func() {
 		defer mts.wg.Done()
-		ticker := time.NewTicker(time.Second * 180) // 24h
+		ticker := time.NewTicker(time.Second * 86400) // 24h
 		defer ticker.Stop()
 
 		for {
