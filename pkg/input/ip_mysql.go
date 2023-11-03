@@ -246,10 +246,12 @@ func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replicatio
 			if n.db == "" {
 				n.db = db
 			}
+			// filter meta db _go_mysql_sr
 			if n.db == position.DbName {
 				continue
 			}
 
+			// schema table reg
 			reg, err := regexp.Compile(rule.SchemaTableToStrRegex(n.db, n.table))
 			if err != nil {
 				log.Fatalf("parse schema table regexp err %v", err.Error())
@@ -261,6 +263,25 @@ func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replicatio
 					isHandleDDL = true
 					break
 				}
+
+				regexToSchema, regexToTable := rule.StrRegexToSchemaTable(regex.String())
+				// aliyun dms online ddl reg
+				aliyunDMSOnlineDdlRegStr := fmt.Sprintf("^tp_\\d+_(ogt|del|ogl)_%s$", regexToTable)
+				aliyunDMSOnlineDdlReg, err := regexp.Compile(aliyunDMSOnlineDdlRegStr)
+				if err != nil {
+					log.Fatalf("parse aliyun dms online ddl regexp err %v", err.Error())
+				}
+				// aliyun dms online ddl reg2
+				aliyunDMSOnlineDdlReg2Str := fmt.Sprintf("^tpa_[a-z0-9]+_%v$", regexToTable)
+				aliyunDMSOnlineDdlReg2, err := regexp.Compile(aliyunDMSOnlineDdlReg2Str)
+				if err != nil {
+					log.Fatalf("parse aliyun dms online ddl regexp err %v", err.Error())
+				}
+				if n.db == regexToSchema &&
+					(aliyunDMSOnlineDdlReg.MatchString(n.table) || aliyunDMSOnlineDdlReg2.MatchString(n.table)) {
+					isHandleDDL = true
+					break
+				}
 			}
 
 			if isHandleDDL {
@@ -269,6 +290,10 @@ func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replicatio
 				reg, _ := regexp.Compile("charset \\w*")
 				ddl = reg.ReplaceAllString(ddl, "")
 
+				// handle rename table
+				if n.newDb != "" {
+					ddl = fmt.Sprintf("rename table %s.%s to %s.%s", n.db, n.table, n.newDb, n.newTable)
+				}
 				err = mi.inSchema.UpdateTable(n.db, n.table, ddl, gtid)
 				if err != nil {
 					log.Errorf("handle query(%s) err %v", queryEvent.Query, err)
@@ -486,8 +511,10 @@ func deserializeForLocal(raw interface{}, column schema2.TableColumn) interface{
 }
 
 type node struct {
-	db    string
-	table string
+	db       string
+	table    string
+	newDb    string
+	newTable string
 }
 
 func (mi *MysqlInputPlugin) parseStmt(stmt ast.StmtNode) (ns []*node) {
@@ -495,8 +522,10 @@ func (mi *MysqlInputPlugin) parseStmt(stmt ast.StmtNode) (ns []*node) {
 	case *ast.RenameTableStmt:
 		for _, tableInfo := range t.TableToTables {
 			n := &node{
-				db:    tableInfo.OldTable.Schema.String(),
-				table: tableInfo.OldTable.Name.String(),
+				db:       tableInfo.OldTable.Schema.String(),
+				table:    tableInfo.OldTable.Name.String(),
+				newDb:    tableInfo.NewTable.Schema.String(),
+				newTable: tableInfo.NewTable.Name.String(),
 			}
 			ns = append(ns, n)
 		}
@@ -515,12 +544,6 @@ func (mi *MysqlInputPlugin) parseStmt(stmt ast.StmtNode) (ns []*node) {
 			ns = append(ns, n)
 		}
 	case *ast.CreateTableStmt:
-		n := &node{
-			db:    t.Table.Schema.String(),
-			table: t.Table.Name.String(),
-		}
-		ns = []*node{n}
-	case *ast.TruncateTableStmt:
 		n := &node{
 			db:    t.Table.Schema.String(),
 			table: t.Table.Name.String(),
