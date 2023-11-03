@@ -145,14 +145,14 @@ func (sr *Starrocks) StartOutput(outputChan *channel.OutputChannel) {
 			}
 
 			// only start lastCtlMsg is nil
-			if sr.lastCtlMsg == nil {
+			/*if sr.lastCtlMsg == nil {
 				if sr.close {
 					log.Infof("not found lastCtlMsg and output data, not last one flush.")
 					return
 				} else {
 					continue
 				}
-			}
+			}*/
 
 			if sr.lastCtlMsg.AfterCommitCallback != nil {
 				err := sr.lastCtlMsg.AfterCommitCallback(sr.lastCtlMsg)

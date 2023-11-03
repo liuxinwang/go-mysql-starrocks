@@ -146,14 +146,14 @@ func (ds *Doris) StartOutput(outputChan *channel.OutputChannel) {
 			}
 
 			// only start lastCtlMsg is nil
-			if ds.lastCtlMsg == nil {
+			/*if ds.lastCtlMsg == nil {
 				if ds.close {
 					log.Infof("not found lastCtlMsg and output data, not last one flush.")
 					return
 				} else {
 					continue
 				}
-			}
+			}*/
 
 			if ds.lastCtlMsg.AfterCommitCallback != nil {
 				err := ds.lastCtlMsg.AfterCommitCallback(ds.lastCtlMsg)

@@ -109,6 +109,19 @@ func (mi *MysqlInputPlugin) StartInput(pos position.Position, syncChan *channel.
 	mi.position = mysqlPos
 	mi.syncPosition = &position.MysqlBasePosition{BinlogName: mysqlPos.BinlogName, BinlogPos: mysqlPos.BinlogPos, BinlogGTID: mysqlPos.BinlogGTID}
 
+	// init first ctl, bug fix start large transactions
+	ctlMsg := &msg.Msg{
+		Type:       msg.MsgCtl,
+		PluginName: msg.MysqlPlugin,
+		InputContext: &inputContext{ // last sync position
+			BinlogName: mi.syncPosition.BinlogName,
+			BinlogPos:  mi.syncPosition.BinlogPos,
+			BinlogGTID: mi.syncPosition.BinlogGTID,
+			force:      true},
+		AfterCommitCallback: mi.AfterMsgCommit,
+	}
+	mi.syncChan.SyncChan <- ctlMsg
+
 	// Start canal
 	go func() {
 		err := c.StartFromGTID(gs)
