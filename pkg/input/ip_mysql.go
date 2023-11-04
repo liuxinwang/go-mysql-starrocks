@@ -277,8 +277,16 @@ func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replicatio
 				if err != nil {
 					log.Fatalf("parse aliyun dms online ddl regexp err %v", err.Error())
 				}
+				// gh-ost online ddl reg
+				ghostOnlineDdlRegStr := fmt.Sprintf("^_%s_(gho|ghc|del)$", regexToTable)
+				ghostOnlineDdlReg, err := regexp.Compile(ghostOnlineDdlRegStr)
+				if err != nil {
+					log.Fatalf("parse gh-ost online ddl regexp err %v", err.Error())
+				}
 				if n.db == regexToSchema &&
-					(aliyunDMSOnlineDdlReg.MatchString(n.table) || aliyunDMSOnlineDdlReg2.MatchString(n.table)) {
+					(aliyunDMSOnlineDdlReg.MatchString(n.table) ||
+						aliyunDMSOnlineDdlReg2.MatchString(n.table) ||
+						ghostOnlineDdlReg.MatchString(n.table)) {
 					isHandleDDL = true
 					break
 				}
