@@ -430,6 +430,7 @@ func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{},
 				if err != nil {
 					return err, tmpIndex
 				}
+				fullRows = tmpIndex
 			}
 		case *output.Starrocks:
 			err = conn.ExecuteSelectStreaming(querySql, &result, func(row []mysql.FieldValue) error {
@@ -469,6 +470,7 @@ func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{},
 				if err != nil {
 					return err, tmpIndex
 				}
+				fullRows = tmpIndex
 			}
 		default:
 			// TODO
