@@ -294,8 +294,10 @@ func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replicatio
 
 			if isHandleDDL {
 				log.Infof("handle ddl event: %v", ddl)
-				// fix go-mysql-server not support column charset
-				reg, _ := regexp.Compile("charset \\w*")
+				// fix github.com/dolthub/go-mysql-server not support column charset
+				// reg, _ := regexp.Compile("charset \\w*")
+				reg, _ := regexp.Compile("(?i)charset `?\\w*`?")
+				// reg, _ := regexp.Compile("(?i)charset `?\\w*`?|(?i)collate `?\\w*`?")
 				ddl = reg.ReplaceAllString(ddl, "")
 
 				// handle rename table
