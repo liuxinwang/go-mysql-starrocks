@@ -1,5 +1,5 @@
 # name 必填，多实例运行时保证全局唯一
-name = "mysql2starrocks"
+name = "mysql2doris"
 
 [input]
 type = "mysql"
@@ -26,14 +26,6 @@ flush-delay-second = 10
 #columns = ["phone"]
 
 #[[filter]]
-#type = "convert-dml-column" # 转换dml行字段类型为json，column varchar（mysql） -> column json（starrocks）
-#[filter.config]
-#match-schema = "mysql_test"
-#match-table = "tb1"
-#columns = ["varchar_json_column", "varchar_arrayjson_column"]
-#cast-as = ["json", "arrayJson"] # json示例: {"id": 1, "name": 'zhangsan'}, arrayJson示例: [{"id": 1, "name": 'zhangsan'}, {"id": 1, "name": 'lisi'}]
-
-#[[filter]]
 #type = "rename-dml-column"
 #[filter.config]
 #match-schema = "mysql_test"
@@ -42,7 +34,7 @@ flush-delay-second = 10
 #rename-as = ["col_11", "col_22"]
 
 [output]
-type = "starrocks"
+type = "doris"
 
 [output.config.target]
 host = "127.0.0.1"
@@ -54,11 +46,11 @@ password = ""
 [[output.config.rule]]
 source-schema = "mysql_test"
 source-table = "tb1"
-target-schema = "starrocks_test"
+target-schema = "doris_test"
 target-table = "tb1"
 
 [[output.config.rule]]
 source-schema = "mysql_test"
 source-table = "tb2"
-target-schema = "starrocks_test"
+target-schema = "doris_test"
 target-table = "tb2"

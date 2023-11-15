@@ -36,7 +36,7 @@ type = "starrocks"
 [output.config.target]
 host = "127.0.0.1"
 port = 9030
-load-port = 8040
+load-port = 8040 # support fe httpPort:8030 or be httpPort:8040
 username = "root"
 password = ""
 
