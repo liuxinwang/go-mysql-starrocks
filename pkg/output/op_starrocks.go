@@ -42,6 +42,8 @@ type Starrocks struct {
 	pauseC        chan bool
 	resumeC       chan bool
 	paused        bool
+	tr            *http.Transport
+	cli           *http.Client
 }
 
 func (sr *Starrocks) NewOutput(outputConfig interface{}, rulesMap map[string]interface{}, inSchema schema.Schema) {
@@ -71,6 +73,15 @@ func (sr *Starrocks) NewOutput(outputConfig interface{}, rulesMap map[string]int
 	sr.pauseC = make(chan bool, 1)
 	sr.resumeC = make(chan bool, 1)
 	sr.paused = false
+	sr.tr = &http.Transport{}
+	sr.cli = &http.Client{
+		Transport: sr.tr,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
+			req.Header.Add("Authorization", "Basic "+sr.auth())
+			// log.Debugf("重定向请求到be: %v", req.URL)
+			return nil // return nil nil回重定向。
+		},
+	}
 }
 
 func (sr *Starrocks) StartOutput(outputChan *channel.OutputChannel) {
@@ -311,12 +322,15 @@ func (sr *Starrocks) generateJSON(msgs []*msg.Msg) []string {
 }
 
 func (sr *Starrocks) SendData(content []string, table *schema.Table, targetSchema string, targetTable string, ignoreColumns []string) error {
-	cli := &http.Client{
-		/** CheckRedirect: func(req *http.Request, via []*http.Request) error {
+	/**cli := &http.Client{
+		Timeout: 10 * time.Second,
+		CheckRedirect: func(req *http.Request, via []*http.Request) error {
 			req.Header.Add("Authorization", "Basic "+sr.auth())
+			req.URL.Host = "127.0.0.1:8040"
+			log.Infof("重定向请求到be: %v", req.URL)
 			return nil // return nil nil回重定向。
-		}, */
-	}
+		},
+	}*/
 	loadUrl := fmt.Sprintf("http://%s:%d/api/%s/%s/_stream_load",
 		sr.Host, sr.LoadPort, targetSchema, targetTable)
 	newContent := `[` + strings.Join(content, ",") + `]`
@@ -341,12 +355,17 @@ func (sr *Starrocks) SendData(content []string, table *schema.Table, targetSchem
 	columns := fmt.Sprintf("%s, __op = %s", strings.Join(columnArray, ","), DeleteColumn)
 	req.Header.Add("columns", columns)
 
-	response, err := cli.Do(req)
+	response, err := sr.cli.Do(req)
 	if err != nil {
 		return errors.Trace(err)
 	}
+	defer response.Body.Close()
 	returnMap, err := sr.parseResponse(response)
+	if err != nil {
+		return errors.Trace(err)
+	}
 	if returnMap["Status"] != "Success" {
+		log.Error(err.Error())
 		message := returnMap["Message"]
 		errorUrl := returnMap["ErrorURL"]
 		errorMsg := message.(string) +
