@@ -31,23 +31,31 @@ type MysqlTablesV3 struct {
 	*config.MysqlConfig
 	tablesLock sync.RWMutex
 	*MysqlTablesMetaV3
-	posId       int
-	connLock    sync.Mutex
-	conn        *client.Conn
-	memConnLock sync.Mutex
-	memConn     *client.Conn
-	FilePath    string
-	wg          sync.WaitGroup
-	ctx         context.Context
-	cancel      context.CancelFunc
+	metaConfig   *config.MysqlConfig
+	posId        int
+	connLock     sync.Mutex
+	conn         *client.Conn
+	metaConnLock sync.Mutex
+	metaConn     *client.Conn
+	memConnLock  sync.Mutex
+	memConn      *client.Conn
+	FilePath     string
+	wg           sync.WaitGroup
+	ctx          context.Context
+	cancel       context.CancelFunc
 }
 
-func (mts *MysqlTablesV3) NewSchemaTables(conf *config.BaseConfig, pluginConfig interface{}, startPos string, rulesMap map[string]interface{}) {
+func (mts *MysqlTablesV3) NewSchemaTables(conf *config.BaseConfig, pluginConfig map[string]interface{}, startPos string, rulesMap map[string]interface{}) {
 	mts.MysqlTablesMetaV3 = &MysqlTablesMetaV3{tables: make(map[string]*Table)}
 	mts.MysqlConfig = &config.MysqlConfig{}
-	err := mapstructure.Decode(pluginConfig, mts.MysqlConfig)
+	mts.metaConfig = &config.MysqlConfig{}
+	err := mapstructure.Decode(pluginConfig["source"], mts.MysqlConfig)
 	if err != nil {
 		log.Fatalf("new schema tables config parsing failed. err: %v", err.Error())
+	}
+	err = mapstructure.Decode(pluginConfig["meta"], mts.metaConfig)
+	if err != nil {
+		log.Fatalf("new schema tables meta config parsing failed. err: %v", err.Error())
 	}
 	mts.ctx, mts.cancel = context.WithCancel(context.Background())
 	// init conn
@@ -56,6 +64,15 @@ func (mts *MysqlTablesV3) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 		log.Fatalf("new schema tables conn failed. err: %v", err.Error())
 	}
 	_ = mts.conn.SetCharset("utf8")
+
+	// init meta conn
+	mts.metaConn, err = client.Connect(
+		fmt.Sprintf("%s:%d", mts.metaConfig.Host, mts.metaConfig.Port),
+		mts.metaConfig.UserName, mts.metaConfig.Password, "")
+	if err != nil {
+		log.Fatalf("new schema tables meta conn failed. err: %v", err.Error())
+	}
+	_ = mts.metaConn.SetCharset("utf8")
 
 	// init vm memory mysql server for schema meta
 	go mts.newMemMyServer()
@@ -94,13 +111,13 @@ func (mts *MysqlTablesV3) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 		"inner join `%s`.`positions` po on tc.pos_id = po.id "+
 		"where po.name = '%s' and tc.updated_at < '%s' "+
 		"order by tc.updated_at desc limit 1", position.DbName, position.DbName, conf.Name, gtidTime)
-	r, err := mts.ExecuteSQL(getLastTimeSql)
+	r, err := mts.ExecuteSQLForMetaDB(getLastTimeSql)
 	if err != nil {
 		log.Fatal("query last checkpoint data failed. err: ", err.Error())
 	}
 	// get pos_id
 	getPosIdSql := fmt.Sprintf("select id from `%s`.positions where name = '%s'", position.DbName, conf.Name)
-	posIdRs, err := mts.ExecuteSQL(getPosIdSql)
+	posIdRs, err := mts.ExecuteSQLForMetaDB(getPosIdSql)
 	if err != nil {
 		log.Fatal("query last checkpoint data failed. err: ", err.Error())
 	}
@@ -175,7 +192,7 @@ func (mts *MysqlTablesV3) NewSchemaTables(conf *config.BaseConfig, pluginConfig 
 		incrementDdlSql := fmt.Sprintf("select db, table_ddl "+
 			"from `%s`.table_increment_ddl where pos_id = '%d' and updated_at >= '%s' "+
 			"and updated_at < '%s'", position.DbName, posId, updatedAt, gtidTime)
-		idr, err := mts.ExecuteSQL(incrementDdlSql)
+		idr, err := mts.ExecuteSQLForMetaDB(incrementDdlSql)
 		if err != nil {
 			log.Fatal("get increment ddl failed. err: ", err.Error())
 		}
@@ -298,7 +315,7 @@ func (mts *MysqlTablesV3) UpdateTable(db string, table string, ddl interface{}, 
 	}
 	insSql := fmt.Sprintf("insert ignore "+
 		"into `%s`.table_increment_ddl(`pos_id`, `db`, `table_ddl`, `ddl_pos`)values(?, ?, ?, ?)", position.DbName)
-	_, err = mts.ExecuteSQL(insSql, mts.posId, db, fmt.Sprintf("%v", ddl), pos)
+	_, err = mts.ExecuteSQLForMetaDB(insSql, mts.posId, db, fmt.Sprintf("%v", ddl), pos)
 	if err != nil {
 		return err
 	}
@@ -376,6 +393,13 @@ func (mts *MysqlTablesV3) Close() {
 		}
 		log.Infof("schema tables conn is closed.")
 	}
+	if mts.metaConn != nil {
+		err := mts.metaConn.Close()
+		if err != nil {
+			log.Fatalf("schema tables close meta conn failed: %v", err.Error())
+		}
+		log.Infof("schema tables meta conn is closed.")
+	}
 }
 
 func (mts *MysqlTablesV3) ExecuteSQL(cmd string, args ...interface{}) (rr *mysql.Result, err error) {
@@ -400,6 +424,38 @@ func (mts *MysqlTablesV3) ExecuteSQL(cmd string, args ...interface{}) (rr *mysql
 				return nil, err
 			}
 			mts.conn = nil
+			continue
+		} else {
+			return
+		}
+	}
+	return
+}
+
+func (mts *MysqlTablesV3) ExecuteSQLForMetaDB(cmd string, args ...interface{}) (rr *mysql.Result, err error) {
+	mts.metaConnLock.Lock()
+	defer mts.metaConnLock.Unlock()
+	argF := make([]func(*client.Conn), 0)
+	retryNum := 3
+	for i := 0; i < retryNum; i++ {
+		if mts.metaConn == nil {
+			mts.metaConn, err = client.Connect(
+				fmt.Sprintf("%s:%d", mts.metaConfig.Host, mts.metaConfig.Port),
+				mts.metaConfig.UserName, mts.metaConfig.Password, "", argF...)
+			if err != nil {
+				return nil, errors.Trace(err)
+			}
+		}
+
+		rr, err = mts.metaConn.Execute(cmd, args...)
+		if err != nil && !mysql.ErrorEqual(err, mysql.ErrBadConn) {
+			return
+		} else if mysql.ErrorEqual(err, mysql.ErrBadConn) {
+			err := mts.metaConn.Close()
+			if err != nil {
+				return nil, err
+			}
+			mts.metaConn = nil
 			continue
 		} else {
 			return
@@ -513,7 +569,7 @@ func (mts *MysqlTablesV3) SaveMeta(tablesMeta string) error {
 
 	sql := fmt.Sprintf("insert "+
 		"into `%s`.table_checkpoints(`pos_id`, `tables_meta`)values(?, ?)", position.DbName)
-	_, err := mts.ExecuteSQL(sql, mts.posId, tablesMeta)
+	_, err := mts.ExecuteSQLForMetaDB(sql, mts.posId, tablesMeta)
 	if err != nil {
 		return err
 	}

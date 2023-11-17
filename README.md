@@ -35,6 +35,15 @@ port = 3306
 username = "go_mysql_sr"
 password = ""
 
+# 可选的：
+# meta信息（_go_mysql_sr）保存的mysql地址，不配置和source保持一致
+# 用于source和meta分离，方便source配置从库数据源
+#[input.config.meta]
+#host = "127.0.0.1"
+#port = 3307
+#username = "root"
+#password = "root"
+
 [sync-param]
 # 同步chan队列最大值，达到会进行flush，最小100
 channel-size = 10240

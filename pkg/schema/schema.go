@@ -8,7 +8,7 @@ import (
 )
 
 type Schema interface {
-	NewSchemaTables(config *config.BaseConfig, pluginConfig interface{}, startPos string, rulesMap map[string]interface{})
+	NewSchemaTables(config *config.BaseConfig, pluginConfig map[string]interface{}, startPos string, rulesMap map[string]interface{})
 	AddTableForMsg(msg *msg.Msg) error
 	AddTable(db string, table string) (*Table, error)
 	DelTable(db string, table string) error

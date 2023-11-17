@@ -145,7 +145,7 @@ func main() {
 	}
 	isc.NewInputSourceConfig(baseConfig.InputConfig.Config)
 	positionData := pos.LoadPosition(baseConfig)
-	inSchema.NewSchemaTables(baseConfig, baseConfig.InputConfig.Config["source"], positionData, rr.GetRuleToMap())
+	inSchema.NewSchemaTables(baseConfig, baseConfig.InputConfig.Config, positionData, rr.GetRuleToMap())
 
 	oo.NewOutput(otc, rr.GetRuleToMap(), inSchema)
 	ip.NewInput(isc, rr.GetRuleToRegex(), inSchema)

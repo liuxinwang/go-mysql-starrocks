@@ -25,10 +25,10 @@ type MongoTables struct {
 	cancel     context.CancelFunc
 }
 
-func (mts *MongoTables) NewSchemaTables(conf *config.BaseConfig, pluginConfig interface{}, startPos string, rulesMap map[string]interface{}) {
+func (mts *MongoTables) NewSchemaTables(conf *config.BaseConfig, pluginConfig map[string]interface{}, startPos string, rulesMap map[string]interface{}) {
 	mts.tables = make(map[string]*Table)
 	mts.MongoConfig = &config.MongoConfig{}
-	err := mapstructure.Decode(pluginConfig, mts.MongoConfig)
+	err := mapstructure.Decode(pluginConfig["source"], mts.MongoConfig)
 	if err != nil {
 		log.Fatal("new schema tables config parsing failed. err: %v", err.Error())
 	}

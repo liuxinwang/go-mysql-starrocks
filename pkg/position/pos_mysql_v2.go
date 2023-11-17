@@ -39,16 +39,28 @@ func (pos *MysqlPositionV2) LoadPosition(conf *config.BaseConfig) string {
 	// load pos info from db
 	// init db
 
+	meta, ok := conf.InputConfig.Config["meta"]
 	mc := &config.MysqlConfig{}
-	if err = mapstructure.Decode(conf.InputConfig.Config["source"], mc); err != nil {
-		log.Fatal("input config parsing failed. err: ", err.Error())
+	if ok {
+		if err = mapstructure.Decode(meta, mc); err != nil {
+			log.Fatal("input config parsing failed. err: ", err.Error())
+		}
+	} else {
+		meta = &config.MysqlConfig{}
+		if err = mapstructure.Decode(conf.InputConfig.Config["source"], mc); err != nil {
+			log.Fatal("input config parsing failed. err: ", err.Error())
+		}
+		// if meta is nil, init meta = source
+		conf.InputConfig.Config["meta"] = conf.InputConfig.Config["source"]
 	}
 
 	pos.Name = conf.Name
 
 	// init conn
-	pos.conn, err = client.Connect(fmt.Sprintf("%s:%d", mc.Host, mc.Port),
-		mc.UserName, mc.Password, "", func(c *client.Conn) { c.SetCharset("utf8") })
+	pos.conn, err = client.Connect(
+		fmt.Sprintf("%s:%d", mc.Host, mc.Port),
+		mc.UserName, mc.Password, "",
+		func(c *client.Conn) { c.SetCharset("utf8") })
 	if err != nil {
 		log.Fatal("input config conn failed. err: ", err.Error())
 	}
