@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version="v0.4.4"
+version="v0.4.5"
 currentDir=$(cd $(dirname "$0") || exit; pwd)
 
 path="github.com/go-demo/version"
