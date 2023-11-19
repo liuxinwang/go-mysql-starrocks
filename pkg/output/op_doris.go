@@ -10,8 +10,10 @@ import (
 	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/channel"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/core"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/registry"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/mitchellh/mapstructure"
@@ -35,7 +37,7 @@ type Doris struct {
 	close         bool
 	connLock      sync.Mutex
 	conn          *client.Conn
-	inSchema      schema.Schema
+	inSchema      core.Schema
 	wg            sync.WaitGroup
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -44,22 +46,32 @@ type Doris struct {
 	paused        bool
 }
 
-var DeleteCondition = fmt.Sprintf("%s=1", DeleteColumn)
+const Name = "doris"
 
-func (ds *Doris) NewOutput(outputConfig interface{}, rulesMap map[string]interface{}, inSchema schema.Schema) {
+func init() {
+	registry.RegisterPlugin(registry.OutputPlugin, Name, &Doris{})
+}
+
+func (ds *Doris) Configure(pipelineName string, configOutput map[string]interface{}) error {
+	ds.DorisConfig = &config.DorisConfig{}
+	var target = configOutput["target"]
+	err := mapstructure.Decode(target, ds.DorisConfig)
+	if err != nil {
+		log.Fatal("output.target config parsing failed. err: %v", err.Error())
+	}
+	return nil
+}
+
+func (ds *Doris) NewOutput(outputConfig interface{}, rulesMap map[string]interface{}, inSchema core.Schema) {
 	// init map obj
 	ds.tables = make(map[string]*schema.Table)
 	ds.rulesMap = make(map[string]*rule.DorisRule)
 
 	ds.ctx, ds.cancel = context.WithCancel(context.Background())
 
-	ds.DorisConfig = &config.DorisConfig{}
-	err := mapstructure.Decode(outputConfig, ds.DorisConfig)
-	if err != nil {
-		log.Fatal("output config parsing failed. err: ", err.Error())
-	}
 	ds.close = false
 	ds.StartMetrics()
+	var err error
 	// init conn
 	ds.conn, err = client.Connect(fmt.Sprintf("%s:%d", ds.Host, ds.Port), ds.UserName, ds.Password, "")
 	if err != nil {

@@ -6,11 +6,11 @@ import (
 	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/channel"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/core"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/position"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
-	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/mitchellh/mapstructure"
 	"github.com/siddontang/go-log/log"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -27,7 +27,7 @@ type MongoInputPlugin struct {
 	Client                *mongo.Client
 	ChangeStream          *mongo.ChangeStream
 	syncChan              *channel.SyncChannel
-	position              position.Position
+	position              core.Position
 	includeTableRegexLock sync.RWMutex
 	includeTableRegex     []*regexp.Regexp
 	delay                 *uint32
@@ -55,7 +55,7 @@ type NS struct {
 	Collection string `bson:"coll"`
 }
 
-func (mi *MongoInputPlugin) NewInput(inputConfig interface{}, ruleRegex []string, inSchema schema.Schema) {
+func (mi *MongoInputPlugin) NewInput(inputConfig interface{}, ruleRegex []string, inSchema core.Schema) {
 	mi.MongoConfig = &config.MongoConfig{}
 	err := mapstructure.Decode(inputConfig, mi.MongoConfig)
 	if err != nil {
@@ -75,7 +75,7 @@ func (mi *MongoInputPlugin) NewInput(inputConfig interface{}, ruleRegex []string
 	mi.delay = new(uint32)
 }
 
-func (mi *MongoInputPlugin) StartInput(pos position.Position, syncChan *channel.SyncChannel) position.Position {
+func (mi *MongoInputPlugin) StartInput(pos core.Position, syncChan *channel.SyncChannel) core.Position {
 	var mongoPos = &position.MongoPosition{}
 	if err := mapstructure.Decode(pos, mongoPos); err != nil {
 		log.Fatalf("mongo position parsing failed. err: %s", err.Error())

@@ -6,10 +6,10 @@ import (
 	"github.com/go-mysql-org/go-mysql/client"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/juju/errors"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/core"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/input"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/output"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
-	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/siddontang/go-log/log"
 	"io/ioutil"
 	"net/http"
@@ -18,7 +18,7 @@ import (
 	"strings"
 )
 
-func AddRuleHandle(ip input.Plugin, oo output.Plugin, schema schema.Schema) func(http.ResponseWriter, *http.Request) {
+func AddRuleHandle(ip core.Input, oo core.Output, schema core.Schema) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		// read input param
 		var addRuleMap = make(map[string]interface{}, 1)
@@ -179,7 +179,7 @@ func AddRuleHandle(ip input.Plugin, oo output.Plugin, schema schema.Schema) func
 }
 
 // A DelRuleHandle for delete rule handle.
-func DelRuleHandle(ip input.Plugin, oo output.Plugin, schema schema.Schema) func(http.ResponseWriter, *http.Request) {
+func DelRuleHandle(ip core.Input, oo core.Output, schema core.Schema) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var delRule = make(map[string]interface{}, 1)
 		data, err := ioutil.ReadAll(r.Body)
@@ -252,7 +252,7 @@ func DelRuleHandle(ip input.Plugin, oo output.Plugin, schema schema.Schema) func
 	}
 }
 
-func GetRuleHandle(oo output.Plugin) func(http.ResponseWriter, *http.Request) {
+func GetRuleHandle(oo core.Output) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		rules, err := json.Marshal(oo.GetRules())
@@ -273,7 +273,7 @@ func GetRuleHandle(oo output.Plugin) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func PauseHandle(oo output.Plugin) func(http.ResponseWriter, *http.Request) {
+func PauseHandle(oo core.Output) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		err := oo.Pause()
@@ -294,7 +294,7 @@ func PauseHandle(oo output.Plugin) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func ResumeHandle(oo output.Plugin) func(http.ResponseWriter, *http.Request) {
+func ResumeHandle(oo core.Output) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 
 		err := oo.Resume()
@@ -315,7 +315,7 @@ func ResumeHandle(oo output.Plugin) func(http.ResponseWriter, *http.Request) {
 	}
 }
 
-func FullSync(ip input.Plugin, oo output.Plugin, ruleMap map[string]interface{}, s schema.Schema) (e error, fullRows int) {
+func FullSync(ip core.Input, oo core.Output, ruleMap map[string]interface{}, s core.Schema) (e error, fullRows int) {
 	// handle full data sync
 	log.Infof("start handle full data sync...")
 	switch inputPlugin := ip.(type) {

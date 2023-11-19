@@ -1,4 +1,4 @@
-package rule
+package core
 
 type Rule interface {
 	NewRule(map[string]interface{})

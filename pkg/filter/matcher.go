@@ -3,9 +3,9 @@ package filter
 import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/channel"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/core"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
-	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/siddontang/go-log/log"
 )
 
@@ -62,7 +62,7 @@ func (matcher MatcherFilter) IterateFilter(msg *msg.Msg) bool {
 	return false
 }
 
-func (matcher MatcherFilter) StartFilter(syncChan *channel.SyncChannel, outputChan *channel.OutputChannel, inSchema schema.Schema) {
+func (matcher MatcherFilter) StartFilter(syncChan *channel.SyncChannel, outputChan *channel.OutputChannel, inSchema core.Schema) {
 	// 消费syncChan
 	go func() {
 		for {

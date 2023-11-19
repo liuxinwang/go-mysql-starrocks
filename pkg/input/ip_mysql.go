@@ -6,15 +6,15 @@ import (
 	"github.com/go-mysql-org/go-mysql/canal"
 	"github.com/go-mysql-org/go-mysql/mysql"
 	"github.com/go-mysql-org/go-mysql/replication"
-	"github.com/go-mysql-org/go-mysql/schema"
 	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/channel"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/core"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/position"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/registry"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
-	schema2 "github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/mitchellh/mapstructure"
 	"github.com/pingcap/parser"
 	"github.com/pingcap/parser/ast"
@@ -30,8 +30,8 @@ type MysqlInputPlugin struct {
 	canalConfig         *canal.Config
 	syncChan            *channel.SyncChannel
 	canal               *canal.Canal
-	position            position.Position
-	inSchema            schema2.Schema
+	position            core.Position
+	inSchema            core.Schema
 	parser              *parser.Parser
 	syncPosition        *position.MysqlBasePosition
 	ctlMsgFlushPosition *position.MysqlBasePosition // only ddl before handle
@@ -40,19 +40,23 @@ type MysqlInputPlugin struct {
 	cancel              context.CancelFunc
 }
 
-type inputContext struct {
-	BinlogName string `toml:"binlog-name"`
-	BinlogPos  uint32 `toml:"binlog-pos"`
-	BinlogGTID string `toml:"binlog-gtid"`
-	force      bool
+const Name = "mysql"
+
+func init() {
+	registry.RegisterPlugin(registry.InputPlugin, Name, &MysqlInputPlugin{})
 }
 
-func (mi *MysqlInputPlugin) NewInput(inputConfig interface{}, ruleRegex []string, inSchema schema2.Schema) {
+func (mi *MysqlInputPlugin) Configure(pipelineName string, configInput map[string]interface{}) error {
 	mi.MysqlConfig = &config.MysqlConfig{}
-	err := mapstructure.Decode(inputConfig, mi.MysqlConfig)
+	var source = configInput["source"]
+	err := mapstructure.Decode(source, mi.MysqlConfig)
 	if err != nil {
-		log.Fatal("input config parsing failed. err: ", err.Error())
+		log.Fatal("input.source config parsing failed. err: %v", err.Error())
 	}
+	return nil
+}
+
+func (mi *MysqlInputPlugin) NewInput(inputConfig interface{}, ruleRegex []string, inSchema core.Schema) {
 	mi.ctx, mi.cancel = context.WithCancel(context.Background())
 	// 初始化canal配置
 	cfg := canal.NewDefaultConfig()
@@ -68,7 +72,7 @@ func (mi *MysqlInputPlugin) NewInput(inputConfig interface{}, ruleRegex []string
 	mi.ctlMsgFlushPosition = &position.MysqlBasePosition{BinlogName: "", BinlogPos: 0, BinlogGTID: ""}
 }
 
-func (mi *MysqlInputPlugin) StartInput(pos position.Position, syncChan *channel.SyncChannel) position.Position {
+func (mi *MysqlInputPlugin) StartInput(pos core.Position, syncChan *channel.SyncChannel) core.Position {
 	// 初始化canal
 	c, err := canal.NewCanal(mi.canalConfig)
 	if err != nil {
@@ -79,7 +83,7 @@ func (mi *MysqlInputPlugin) StartInput(pos position.Position, syncChan *channel.
 	// Register a handler to handle RowsEvent
 	c.SetEventHandler(mi)
 
-	var mysqlPos = &position.MysqlPositionV2{}
+	var mysqlPos = &position.MysqlPosition{}
 	if err := mapstructure.Decode(pos, mysqlPos); err != nil {
 		log.Fatalf("mysql position parsing failed. err: %s", err.Error())
 	}
@@ -488,43 +492,6 @@ func (mi *MysqlInputPlugin) promTimingMetrics() {
 			}
 		}
 	}()
-}
-
-func deserialize(raw interface{}, column schema.TableColumn) interface{} {
-	if raw == nil {
-		return nil
-	}
-
-	ret := raw
-	if column.RawType == "text" || column.RawType == "json" {
-		_, ok := raw.([]uint8)
-		if ok {
-			ret = string(raw.([]uint8))
-		}
-	}
-	return ret
-}
-
-func deserializeForLocal(raw interface{}, column schema2.TableColumn) interface{} {
-	if raw == nil {
-		return nil
-	}
-
-	ret := raw
-	if column.RawType == "text" || column.RawType == "json" {
-		_, ok := raw.([]uint8)
-		if ok {
-			ret = string(raw.([]uint8))
-		}
-	}
-	return ret
-}
-
-type node struct {
-	db       string
-	table    string
-	newDb    string
-	newTable string
 }
 
 func (mi *MysqlInputPlugin) parseStmt(stmt ast.StmtNode) (ns []*node) {

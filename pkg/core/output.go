@@ -1,4 +1,4 @@
-package output
+package core
 
 import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/channel"
@@ -6,8 +6,8 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 )
 
-type Plugin interface {
-	NewOutput(config interface{}, rulesMap map[string]interface{}, inSchema schema.Schema)
+type Output interface {
+	NewOutput(config interface{}, rulesMap map[string]interface{}, inSchema Schema)
 	StartOutput(outputChan *channel.OutputChannel)
 	Execute(msgs []*msg.Msg, tableObj *schema.Table, targetSchema string, targetTable string) error
 	Close()

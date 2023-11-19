@@ -3,14 +3,9 @@ package main
 import (
 	"fmt"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/api"
-	"github.com/liuxinwang/go-mysql-starrocks/pkg/channel"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/app"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
-	"github.com/liuxinwang/go-mysql-starrocks/pkg/filter"
-	"github.com/liuxinwang/go-mysql-starrocks/pkg/input"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
-	"github.com/liuxinwang/go-mysql-starrocks/pkg/output"
-	"github.com/liuxinwang/go-mysql-starrocks/pkg/position"
-	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/utils"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -85,103 +80,36 @@ func main() {
 	// 初始化配置
 	baseConfig := config.NewBaseConfig(help.ConfigFile)
 
-	var isc config.InputSourceConfig
-	var otc config.OutputTargetConfig
-	var ip input.Plugin
-	var rr rule.Rule
-	var pos position.Position
-	var syncChan *channel.SyncChannel
-	var outputChan *channel.OutputChannel
-	var matcherFilter filter.MatcherFilter
-	var oo output.Plugin
-	var inSchema schema.Schema
-
-	// 初始化channel
-	syncChan = &channel.SyncChannel{}
-	syncChan.NewChannel(baseConfig.SyncParamConfig)
-	outputChan = &channel.OutputChannel{}
-	outputChan.NewChannel(baseConfig.SyncParamConfig)
-
-	// 初始化output插件配置
-	switch baseConfig.OutputConfig.Type {
-	case "doris":
-		otc = &config.DorisConfig{}
-		// 初始化rule配置
-		rr = &rule.DorisRules{}
-		// 初始化output插件实例
-		oo = &output.Doris{}
-	case "starrocks":
-		otc = &config.StarrocksConfig{}
-		// 初始化rule配置
-		rr = &rule.StarrocksRules{}
-		// 初始化output插件实例
-		oo = &output.Starrocks{}
-	case "mysql":
-		otc = &config.MysqlConfig{}
-		// 初始化rule配置
-		rr = &rule.MysqlRules{}
-		// 初始化output插件实例
-		oo = &output.Mysql{}
+	s, err := app.NewServer(baseConfig)
+	if err != nil {
+		log.Fatalf("%v", err.Error())
 	}
-	otc.NewOutputTargetConfig(baseConfig.OutputConfig.Config)
-	rr.NewRule(baseConfig.OutputConfig.Config)
 
-	// 初始化input插件配置
-	switch baseConfig.InputConfig.Type {
-	case "mysql":
-		isc = &config.MysqlConfig{}
-		// 初始化input插件实例
-		ip = &input.MysqlInputPlugin{}
-		pos = &position.MysqlPositionV2{}
-		// init input schema
-		inSchema = &schema.MysqlTablesV3{}
-	case "mongo":
-		isc = &config.MongoConfig{}
-		// 初始化input插件实例
-		ip = &input.MongoInputPlugin{}
-		pos = &position.MongoPosition{}
-		// init input schema
-		inSchema = &schema.MongoTables{}
+	err = s.Start()
+	if err != nil {
+		log.Fatalf("%v", err.Error())
 	}
-	isc.NewInputSourceConfig(baseConfig.InputConfig.Config)
-	positionData := pos.LoadPosition(baseConfig)
-	inSchema.NewSchemaTables(baseConfig, baseConfig.InputConfig.Config, positionData, rr.GetRuleToMap())
-
-	oo.NewOutput(otc, rr.GetRuleToMap(), inSchema)
-	ip.NewInput(isc, rr.GetRuleToRegex(), inSchema)
-
-	// 初始化filter配置
-	matcherFilter = filter.NewMatcherFilter(baseConfig.FilterConfig)
-
-	// 启动input插件
-	pos = ip.StartInput(pos, syncChan)
-	// 启动position
-	pos.StartPosition()
-	// 启动filter
-	matcherFilter.StartFilter(syncChan, outputChan, inSchema)
-	// 启动output插件
-	go oo.StartOutput(outputChan)
 
 	// api handle
-	http.HandleFunc("/api/addRule", api.AddRuleHandle(ip, oo, inSchema))
-	http.HandleFunc("/api/delRule", api.DelRuleHandle(ip, oo, inSchema))
-	http.HandleFunc("/api/getRule", api.GetRuleHandle(oo))
-	http.HandleFunc("/api/pause", api.PauseHandle(oo))
-	http.HandleFunc("/api/resume", api.ResumeHandle(oo))
+	http.HandleFunc("/api/addRule", api.AddRuleHandle(s.Input, s.Output, s.InputSchema))
+	http.HandleFunc("/api/delRule", api.DelRuleHandle(s.Input, s.Output, s.InputSchema))
+	http.HandleFunc("/api/getRule", api.GetRuleHandle(s.Output))
+	http.HandleFunc("/api/pause", api.PauseHandle(s.Output))
+	http.HandleFunc("/api/resume", api.ResumeHandle(s.Output))
 
 	select {
 	case n := <-sc:
 		log.Infof("receive signal %v, closing", n)
 		// 关闭input插件
-		ip.Close()
+		s.Input.Close()
 		// 关闭filter
-		syncChan.Close()
+		s.SyncChan.Close()
 		// 关闭output插件
-		oo.Close()
+		s.Output.Close()
 		// flush last position
-		pos.Close()
+		s.InputPosition.Close()
 		// close schema conn
-		inSchema.Close()
+		s.InputSchema.Close()
 		log.Infof("[Main] is stopped.")
 	}
 }

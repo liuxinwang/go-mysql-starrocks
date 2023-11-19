@@ -10,6 +10,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/channel"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/core"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
@@ -35,7 +36,7 @@ type Starrocks struct {
 	close         bool
 	connLock      sync.Mutex
 	conn          *client.Conn
-	inSchema      schema.Schema
+	inSchema      core.Schema
 	wg            sync.WaitGroup
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -46,7 +47,7 @@ type Starrocks struct {
 	cli           *http.Client
 }
 
-func (sr *Starrocks) NewOutput(outputConfig interface{}, rulesMap map[string]interface{}, inSchema schema.Schema) {
+func (sr *Starrocks) NewOutput(outputConfig interface{}, rulesMap map[string]interface{}, inSchema core.Schema) {
 	// init map obj
 	sr.tables = make(map[string]*schema.Table)
 	sr.rulesMap = make(map[string]*rule.StarrocksRule)

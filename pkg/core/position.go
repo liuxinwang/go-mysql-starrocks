@@ -1,8 +1,6 @@
-package position
+package core
 
-import (
-	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
-)
+import "github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 
 type Position interface {
 	LoadPosition(config *config.BaseConfig) string

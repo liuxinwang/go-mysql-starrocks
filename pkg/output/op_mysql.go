@@ -8,6 +8,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/channel"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/core"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
@@ -31,7 +32,7 @@ type Mysql struct {
 	close         bool
 	connLock      sync.Mutex
 	conn          *client.Conn
-	inSchema      schema.Schema
+	inSchema      core.Schema
 	wg            sync.WaitGroup
 	ctx           context.Context
 	cancel        context.CancelFunc
@@ -40,7 +41,7 @@ type Mysql struct {
 	paused        bool
 }
 
-func (m *Mysql) NewOutput(outputConfig interface{}, rulesMap map[string]interface{}, inSchema schema.Schema) {
+func (m *Mysql) NewOutput(outputConfig interface{}, rulesMap map[string]interface{}, inSchema core.Schema) {
 	// init map obj
 	m.tables = make(map[string]*schema.Table)
 	m.rulesMap = make(map[string]*rule.MysqlRule)
