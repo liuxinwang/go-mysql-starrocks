@@ -96,7 +96,7 @@ func (mts *MysqlTables) NewSchemaTables(conf *config.BaseConfig, pluginConfig ma
 	}
 
 	// init tables
-	for k, _ := range rulesMap {
+	for k := range rulesMap {
 		schemaName, tableName, err := rule.GetRuleKeySchemaTable(k)
 		if err != nil {
 			log.Fatalf("%v", err.Error())
@@ -165,7 +165,7 @@ func (mts *MysqlTables) NewSchemaTables(conf *config.BaseConfig, pluginConfig ma
 			log.Fatalf("tables meta unmarshal map error. err: %v", err.Error())
 		}
 		tmpTablesMeta := make(map[string]interface{})
-		for k, _ := range rulesMap {
+		for k := range rulesMap {
 			schemaName, tableName, err := rule.GetRuleKeySchemaTable(k)
 			if err != nil {
 				log.Fatalf("%v", err.Error())
@@ -510,7 +510,7 @@ func (mts *MysqlTables) LoadMetaFromDB(rulesMap map[string]interface{}) map[stri
 	log.Debugf("start load tables meta from db, waiting...")
 	createDDLMap := make(map[string]interface{})
 	var tables []string
-	for k, _ := range rulesMap {
+	for k := range rulesMap {
 		schemaName, tableName, err := rule.GetRuleKeySchemaTable(k)
 		if err != nil {
 			log.Fatalf("%v", err)
@@ -532,7 +532,7 @@ func (mts *MysqlTables) LoadSyncTableMetaFromDB() map[string]interface{} {
 	log.Debugf("start load sync tables meta from db, waiting...")
 	createDDLMap := make(map[string]interface{})
 	var tables []string
-	for k, _ := range mts.tables {
+	for k := range mts.tables {
 		schemaName, tableName, err := rule.GetRuleKeySchemaTable(k)
 		if err != nil {
 			log.Fatalf("%v", err)

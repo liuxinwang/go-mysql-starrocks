@@ -71,7 +71,7 @@ func (pos *MysqlPosition) LoadPosition(conf *config.BaseConfig) string {
 	pos.conn, err = client.Connect(
 		fmt.Sprintf("%s:%d", mc.Host, mc.Port),
 		mc.UserName, mc.Password, "",
-		func(c *client.Conn) { c.SetCharset("utf8") })
+		func(c *client.Conn) { _ = c.SetCharset("utf8") })
 	if err != nil {
 		log.Fatal("input config conn failed. err: ", err.Error())
 	}

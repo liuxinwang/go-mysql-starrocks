@@ -11,7 +11,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/output"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
 	"github.com/siddontang/go-log/log"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"regexp"
 	"strconv"
@@ -23,7 +23,7 @@ func AddRuleHandle(ip core.Input, oo core.Output, schema core.Schema) func(http.
 		// read input param
 		var addRuleMap = make(map[string]interface{}, 1)
 		addRuleMap["RuleType"] = rule.TypeDynamicAdd
-		data, err := ioutil.ReadAll(r.Body)
+		data, err := io.ReadAll(r.Body)
 		if err != nil {
 			_, err = w.Write([]byte(fmt.Sprintf("result: add rule json data read err: %v\n", err.Error())))
 			if err != nil {
@@ -182,7 +182,7 @@ func AddRuleHandle(ip core.Input, oo core.Output, schema core.Schema) func(http.
 func DelRuleHandle(ip core.Input, oo core.Output, schema core.Schema) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {
 		var delRule = make(map[string]interface{}, 1)
-		data, err := ioutil.ReadAll(r.Body)
+		data, err := io.ReadAll(r.Body)
 		if err != nil {
 			_, err = w.Write([]byte(fmt.Sprintf("result: delete rule json data read err: %v\n", err.Error())))
 			if err != nil {
@@ -327,7 +327,7 @@ func FullSync(ip core.Input, oo core.Output, ruleMap map[string]interface{}, s c
 		// 同步历史全量数据
 		// init conn
 		conn, err := client.Connect(fmt.Sprintf("%s:%d", inputPlugin.Host, inputPlugin.Port),
-			inputPlugin.UserName, inputPlugin.Password, "", func(c *client.Conn) { c.SetCharset("utf8") })
+			inputPlugin.UserName, inputPlugin.Password, "", func(c *client.Conn) { _ = c.SetCharset("utf8") })
 		if err != nil {
 			log.Errorf("rule map init conn failed. err: ", err.Error())
 			return err, 0

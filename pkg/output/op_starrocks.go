@@ -17,7 +17,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/mitchellh/mapstructure"
 	"github.com/siddontang/go-log/log"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -360,7 +360,9 @@ func (sr *Starrocks) SendData(content []string, table *schema.Table, targetSchem
 	if err != nil {
 		return errors.Trace(err)
 	}
-	defer response.Body.Close()
+	defer func(Body io.ReadCloser) {
+		_ = Body.Close()
+	}(response.Body)
 	returnMap, err := sr.parseResponse(response)
 	if err != nil {
 		return errors.Trace(err)
@@ -402,7 +404,7 @@ func (sr *Starrocks) isContain(items []string, item string) bool {
 
 func (sr *Starrocks) parseResponse(response *http.Response) (map[string]interface{}, error) {
 	var result map[string]interface{}
-	body, err := ioutil.ReadAll(response.Body)
+	body, err := io.ReadAll(response.Body)
 	if err == nil {
 		err = json.Unmarshal(body, &result)
 	}

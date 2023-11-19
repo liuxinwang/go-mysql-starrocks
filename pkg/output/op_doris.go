@@ -18,7 +18,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/mitchellh/mapstructure"
 	"github.com/siddontang/go-log/log"
-	"io/ioutil"
+	"io"
 	"net/http"
 	"strings"
 	"sync"
@@ -404,7 +404,7 @@ func (ds *Doris) isContain(items []string, item string) bool {
 
 func (ds *Doris) parseResponse(response *http.Response) (map[string]interface{}, error) {
 	var result map[string]interface{}
-	body, err := ioutil.ReadAll(response.Body)
+	body, err := io.ReadAll(response.Body)
 	if err == nil {
 		err = json.Unmarshal(body, &result)
 	}
