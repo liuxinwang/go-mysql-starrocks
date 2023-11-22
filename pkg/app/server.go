@@ -7,6 +7,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/core"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/filter"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/registry"
+	"github.com/siddontang/go-log/log"
 	"sync"
 )
 
@@ -30,6 +31,7 @@ func NewServer(config *config.BaseConfig) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	log.Infof("load output plugin: %v", config.OutputConfig.Type)
 	output, ok := plugin.(core.Output)
 	if !ok {
 		return nil, errors.Errorf("not a valid output plugin: %v", config.OutputConfig.Type)
@@ -45,6 +47,7 @@ func NewServer(config *config.BaseConfig) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	log.Infof("load output rule plugin: %v", config.OutputConfig.Type)
 	rule, ok := plugin.(core.Rule)
 	if !ok {
 		return nil, errors.Errorf("not a valid output rule plugin: %v", config.OutputConfig.Type)
@@ -60,6 +63,7 @@ func NewServer(config *config.BaseConfig) (*Server, error) {
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	log.Infof("load input plugin: %v", config.InputConfig.Type)
 	input, ok := plugin.(core.Input)
 	if !ok {
 		return nil, errors.Errorf("not a valid input type")
@@ -71,24 +75,26 @@ func NewServer(config *config.BaseConfig) (*Server, error) {
 	}
 
 	// input position
-	plugin, err = registry.GetPlugin(registry.InputPositionPlugin, config.OutputConfig.Type)
+	plugin, err = registry.GetPlugin(registry.InputPositionPlugin, config.InputConfig.Type)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	log.Infof("load input position plugin: %v", config.InputConfig.Type)
 	position, ok := plugin.(core.Position)
 	if !ok {
-		return nil, errors.Errorf("not a valid input position plugin: %v", config.OutputConfig.Type)
+		return nil, errors.Errorf("not a valid input position plugin: %v", config.InputConfig.Type)
 	}
 	server.InputPosition = position
 
 	// input schema
-	plugin, err = registry.GetPlugin(registry.InputSchemaPlugin, config.OutputConfig.Type)
+	plugin, err = registry.GetPlugin(registry.InputSchemaPlugin, config.InputConfig.Type)
 	if err != nil {
 		return nil, errors.Trace(err)
 	}
+	log.Infof("load input schema plugin: %v", config.InputConfig.Type)
 	schema, ok := plugin.(core.Schema)
 	if !ok {
-		return nil, errors.Errorf("not a valid input schema plugin: %v", config.OutputConfig.Type)
+		return nil, errors.Errorf("not a valid input schema plugin: %v", config.InputConfig.Type)
 	}
 	server.InputSchema = schema
 
