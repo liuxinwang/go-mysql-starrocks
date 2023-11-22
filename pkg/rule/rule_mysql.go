@@ -1,6 +1,7 @@
 package rule
 
 import (
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/registry"
 	"github.com/mitchellh/mapstructure"
 	"github.com/siddontang/go-log/log"
 )
@@ -22,6 +23,28 @@ type MysqlRule struct {
 	RuleType      RuleType `default:"init" json:"rule-type"` // default: init, init、dynamic add
 	// for api delete rule, only logical deleted, fix output get ruleMap failed problem. when add the same rule physical deleted
 	Deleted bool `default:"false" json:"deleted"`
+}
+
+const MysqlRuleName = "mysql"
+
+func init() {
+	registry.RegisterPlugin(registry.OutputRulePlugin, MysqlRuleName, &MysqlRules{})
+}
+
+func (mrs *MysqlRules) Configure(pipelineName string, configOutput map[string]interface{}) error {
+	configRules := configOutput["rule"]
+	err := mapstructure.Decode(configRules, &mrs.Rules)
+	if err != nil {
+		log.Fatal("output.config.rule config parsing failed. err: ", err.Error())
+	}
+	// init
+	for i := range mrs.Rules {
+		mrs.Rules[i].RuleType = TypeInit
+		mrs.Rules[i].Deleted = false
+	}
+	mrs.RuleToRegex()
+	mrs.RuleToMap()
+	return nil
 }
 
 func (mrs *MysqlRules) NewRule(config map[string]interface{}) {

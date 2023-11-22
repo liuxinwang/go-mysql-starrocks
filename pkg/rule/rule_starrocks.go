@@ -1,6 +1,7 @@
 package rule
 
 import (
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/registry"
 	"github.com/mitchellh/mapstructure"
 	"github.com/siddontang/go-log/log"
 )
@@ -19,6 +20,28 @@ type StarrocksRule struct {
 	RuleType     RuleType `default:"init" json:"rule-type"` // init、dynamic add
 	// for api delete rule, only logical deleted, fix output get ruleMap failed problem. when add the same rule physical deleted
 	Deleted bool `default:"false" json:"deleted"`
+}
+
+const StarrocksRuleName = "starrocks"
+
+func init() {
+	registry.RegisterPlugin(registry.OutputRulePlugin, StarrocksRuleName, &StarrocksRules{})
+}
+
+func (srs *StarrocksRules) Configure(pipelineName string, configOutput map[string]interface{}) error {
+	configRules := configOutput["rule"]
+	err := mapstructure.Decode(configRules, &srs.Rules)
+	if err != nil {
+		log.Fatal("output.config.rule config parsing failed. err: ", err.Error())
+	}
+	// init
+	for i := range srs.Rules {
+		srs.Rules[i].RuleType = TypeInit
+		srs.Rules[i].Deleted = false
+	}
+	srs.RuleToRegex()
+	srs.RuleToMap()
+	return nil
 }
 
 func (srs *StarrocksRules) NewRule(config map[string]interface{}) {

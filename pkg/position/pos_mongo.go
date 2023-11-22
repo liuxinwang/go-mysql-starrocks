@@ -7,6 +7,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/registry"
 	"github.com/siddontang/go-log/log"
 	"github.com/siddontang/go/ioutil2"
 	"strconv"
@@ -26,6 +27,16 @@ type MongoPosition struct {
 	wg                sync.WaitGroup
 	ctx               context.Context
 	cancel            context.CancelFunc
+}
+
+const MongoPosName = "mongo"
+
+func init() {
+	registry.RegisterPlugin(registry.InputPositionPlugin, MongoPosName, &MongoPosition{})
+}
+
+func (pos *MongoPosition) Configure(pipelineName string, configInput map[string]interface{}) error {
+	return nil
 }
 
 func (pos *MongoPosition) LoadPosition(config *config.BaseConfig) string {

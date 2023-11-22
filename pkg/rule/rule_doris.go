@@ -22,10 +22,10 @@ type DorisRule struct {
 	Deleted bool `default:"false" json:"deleted"`
 }
 
-const Name = "dorisRule"
+const DorisRuleName = "doris"
 
 func init() {
-	registry.RegisterPlugin(registry.OutputRulePlugin, Name, &DorisRules{})
+	registry.RegisterPlugin(registry.OutputRulePlugin, DorisRuleName, &DorisRules{})
 }
 
 func (drs *DorisRules) Configure(pipelineName string, configOutput map[string]interface{}) error {

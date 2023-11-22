@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"fmt"
 	"github.com/juju/errors"
 	"github.com/siddontang/go-log/log"
 	"sync"
@@ -20,11 +21,11 @@ type Plugin interface {
 	Configure(pipelineName string, data map[string]interface{}) error
 }
 
-var registry map[PluginType]Plugin
+var registry map[PluginType]map[string]Plugin
 var mutex sync.Mutex
 
 func init() {
-	registry = make(map[PluginType]Plugin)
+	registry = make(map[PluginType]map[string]Plugin)
 }
 
 func RegisterPlugin(pluginType PluginType, name string, v Plugin) {
@@ -35,8 +36,14 @@ func RegisterPlugin(pluginType PluginType, name string, v Plugin) {
 
 	_, ok := registry[pluginType]
 	if !ok {
-		registry[pluginType] = v
+		registry[pluginType] = make(map[string]Plugin)
 	}
+
+	_, ok = registry[pluginType][name]
+	if ok {
+		panic(fmt.Sprintf("plugin already exists, type: %v, name: %v", pluginType, name))
+	}
+	registry[pluginType][name] = v
 }
 
 func GetPlugin(pluginType PluginType, name string) (Plugin, error) {
@@ -47,9 +54,13 @@ func GetPlugin(pluginType PluginType, name string) (Plugin, error) {
 		return nil, errors.Errorf("empty registry")
 	}
 
-	plugin, ok := registry[pluginType]
+	plugins, ok := registry[pluginType]
 	if !ok {
 		return nil, errors.Errorf("empty plugin type: %v, name: %v", pluginType, name)
 	}
-	return plugin, nil
+	p, ok := plugins[name]
+	if !ok {
+		return nil, errors.Errorf("empty plugin, type: %v, name: %v", pluginType, name)
+	}
+	return p, nil
 }

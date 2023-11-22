@@ -6,6 +6,7 @@ import (
 	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/registry"
 	"github.com/mitchellh/mapstructure"
 	"github.com/siddontang/go-log/log"
 	"go.mongodb.org/mongo-driver/mongo"
@@ -23,6 +24,16 @@ type MongoTables struct {
 	conn       *mongo.Client
 	ctx        context.Context
 	cancel     context.CancelFunc
+}
+
+const MongoName = "mongo"
+
+func init() {
+	registry.RegisterPlugin(registry.InputSchemaPlugin, MongoName, &MongoTables{})
+}
+
+func (mts *MongoTables) Configure(pipelineName string, configInput map[string]interface{}) error {
+	return nil
 }
 
 func (mts *MongoTables) NewSchemaTables(conf *config.BaseConfig, pluginConfig map[string]interface{}, startPos string, rulesMap map[string]interface{}) {

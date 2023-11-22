@@ -46,10 +46,10 @@ type Doris struct {
 	paused        bool
 }
 
-const Name = "doris"
+const DorisName = "doris"
 
 func init() {
-	registry.RegisterPlugin(registry.OutputPlugin, Name, &Doris{})
+	registry.RegisterPlugin(registry.OutputPlugin, DorisName, &Doris{})
 }
 
 func (ds *Doris) Configure(pipelineName string, configOutput map[string]interface{}) error {

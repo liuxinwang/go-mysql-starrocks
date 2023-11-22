@@ -13,6 +13,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/core"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/registry"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/mitchellh/mapstructure"
@@ -47,6 +48,22 @@ type Starrocks struct {
 	cli           *http.Client
 }
 
+const StarrocksName = "starrocks"
+
+func init() {
+	registry.RegisterPlugin(registry.OutputPlugin, StarrocksName, &Starrocks{})
+}
+
+func (sr *Starrocks) Configure(pipelineName string, configOutput map[string]interface{}) error {
+	sr.StarrocksConfig = &config.StarrocksConfig{}
+	var target = configOutput["target"]
+	err := mapstructure.Decode(target, sr.StarrocksConfig)
+	if err != nil {
+		log.Fatal("output.target config parsing failed. err: %v", err.Error())
+	}
+	return nil
+}
+
 func (sr *Starrocks) NewOutput(outputConfig interface{}, rulesMap map[string]interface{}, inSchema core.Schema) {
 	// init map obj
 	sr.tables = make(map[string]*schema.Table)
@@ -54,13 +71,9 @@ func (sr *Starrocks) NewOutput(outputConfig interface{}, rulesMap map[string]int
 
 	sr.ctx, sr.cancel = context.WithCancel(context.Background())
 
-	sr.StarrocksConfig = &config.StarrocksConfig{}
-	err := mapstructure.Decode(outputConfig, sr.StarrocksConfig)
-	if err != nil {
-		log.Fatal("output config parsing failed. err: ", err.Error())
-	}
 	sr.close = false
 	sr.StartMetrics()
+	var err error
 	// init conn
 	sr.conn, err = client.Connect(fmt.Sprintf("%s:%d", sr.Host, sr.Port), sr.UserName, sr.Password, "")
 	if err != nil {

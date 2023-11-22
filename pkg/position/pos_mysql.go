@@ -34,10 +34,10 @@ type MysqlPosition struct {
 	cancel       context.CancelFunc
 }
 
-const Name = "mysqlPosition"
+const MysqlPosName = "mysql"
 
 func init() {
-	registry.RegisterPlugin(registry.InputPositionPlugin, Name, &MysqlPosition{})
+	registry.RegisterPlugin(registry.InputPositionPlugin, MysqlPosName, &MysqlPosition{})
 }
 
 func (pos *MysqlPosition) Configure(pipelineName string, configInput map[string]interface{}) error {

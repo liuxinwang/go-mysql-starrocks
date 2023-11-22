@@ -10,6 +10,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/position"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/registry"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
 	"github.com/mitchellh/mapstructure"
 	"github.com/siddontang/go-log/log"
@@ -55,12 +56,23 @@ type NS struct {
 	Collection string `bson:"coll"`
 }
 
-func (mi *MongoInputPlugin) NewInput(inputConfig interface{}, ruleRegex []string, inSchema core.Schema) {
+const MongoName = "mongo"
+
+func init() {
+	registry.RegisterPlugin(registry.InputPlugin, MongoName, &MongoInputPlugin{})
+}
+
+func (mi *MongoInputPlugin) Configure(pipelineName string, configInput map[string]interface{}) error {
 	mi.MongoConfig = &config.MongoConfig{}
-	err := mapstructure.Decode(inputConfig, mi.MongoConfig)
+	var source = configInput["source"]
+	err := mapstructure.Decode(source, mi.MongoConfig)
 	if err != nil {
-		log.Fatal("input config parsing failed. err: ", err.Error())
+		log.Fatal("input.source config parsing failed. err: %v", err.Error())
 	}
+	return nil
+}
+
+func (mi *MongoInputPlugin) NewInput(inputConfig interface{}, ruleRegex []string, inSchema core.Schema) {
 	mi.ctx, mi.cancel = context.WithCancel(context.Background())
 
 	uri := fmt.Sprintf("mongodb://%s:%s@%s", mi.UserName, mi.Password, mi.Uri)

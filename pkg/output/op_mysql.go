@@ -11,6 +11,7 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/core"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/registry"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/mitchellh/mapstructure"
@@ -41,6 +42,22 @@ type Mysql struct {
 	paused        bool
 }
 
+const MysqlName = "mysql"
+
+func init() {
+	registry.RegisterPlugin(registry.OutputPlugin, MysqlName, &Mysql{})
+}
+
+func (m *Mysql) Configure(pipelineName string, configOutput map[string]interface{}) error {
+	m.MysqlConfig = &config.MysqlConfig{}
+	var target = configOutput["target"]
+	err := mapstructure.Decode(target, m.MysqlConfig)
+	if err != nil {
+		log.Fatal("output.target config parsing failed. err: %v", err.Error())
+	}
+	return nil
+}
+
 func (m *Mysql) NewOutput(outputConfig interface{}, rulesMap map[string]interface{}, inSchema core.Schema) {
 	// init map obj
 	m.tables = make(map[string]*schema.Table)
@@ -48,13 +65,9 @@ func (m *Mysql) NewOutput(outputConfig interface{}, rulesMap map[string]interfac
 
 	m.ctx, m.cancel = context.WithCancel(context.Background())
 
-	m.MysqlConfig = &config.MysqlConfig{}
-	err := mapstructure.Decode(outputConfig, m.MysqlConfig)
-	if err != nil {
-		log.Fatal("output config parsing failed. err: ", err.Error())
-	}
 	m.close = false
 	m.StartMetrics()
+	var err error
 	// init conn
 	m.conn, err = client.Connect(fmt.Sprintf("%s:%d", m.Host, m.Port), m.UserName, m.Password, "")
 	_ = m.conn.SetCharset("utf8mb4")

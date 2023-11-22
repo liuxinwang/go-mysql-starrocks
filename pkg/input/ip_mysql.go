@@ -40,10 +40,10 @@ type MysqlInputPlugin struct {
 	cancel              context.CancelFunc
 }
 
-const Name = "mysql"
+const MysqlName = "mysql"
 
 func init() {
-	registry.RegisterPlugin(registry.InputPlugin, Name, &MysqlInputPlugin{})
+	registry.RegisterPlugin(registry.InputPlugin, MysqlName, &MysqlInputPlugin{})
 }
 
 func (mi *MysqlInputPlugin) Configure(pipelineName string, configInput map[string]interface{}) error {

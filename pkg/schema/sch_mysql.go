@@ -46,10 +46,10 @@ type MysqlTables struct {
 	cancel       context.CancelFunc
 }
 
-const Name = "mysql"
+const MysqlName = "mysql"
 
 func init() {
-	registry.RegisterPlugin(registry.InputSchemaPlugin, Name, &MysqlTables{})
+	registry.RegisterPlugin(registry.InputSchemaPlugin, MysqlName, &MysqlTables{})
 }
 
 func (mts *MysqlTables) Configure(pipelineName string, configInput map[string]interface{}) error {
