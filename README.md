@@ -79,7 +79,7 @@ type = "starrocks" # or doris
 [output.config.target] # starrocks连接信息
 host = "127.0.0.1"
 port = 9030
-load-port = 8040
+load-port = 8040 # support fe httpPort:8030 or be httpPort:8040
 username = "root"
 password = ""
 
@@ -96,30 +96,23 @@ target-schema = "starrocks_test"
 target-table = "tb2"
 ```
 
-#### 3. 启动
-```shell
-[sr@ ~]$ ./go-mysql-sr-linux-xxxxxx -config mysql-to-starrocks.toml
-```
-
-#### 4. 查看日志
-默认输出到控制台，指定log-file参数运行
-```shell
-[sr@ ~]$ ./go-mysql-sr-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log
-[sr@ ~]$ tail -f mysql2starrocks.log
-```
-
-#### 5. 查看帮助
+#### 3. 查看帮助
 ```shell
 [sr@ ~]$ ./go-mysql-sr-linux-xxxxxx -h
 ```
 
-#### 6. 后台运行
+#### 4. 启动
 ```shell
 [sr@ ~]$ ./go-mysql-sr-linux-xxxxxx -config mysql-to-starrocks.toml -log-file mysql2starrocks.log -level info -daemon
 ```
 
-#### 7. 监控
-7.1 集成prometheus，开放6166端口，通过metrics暴露指标
+#### 5. 查看日志
+```shell
+[sr@ ~]$ tail -f mysql2starrocks.log
+```
+
+#### 6. 监控
+6.1 集成prometheus，开放6166端口，通过metrics暴露指标
 ```shell
 [sr@ ~]$ curl localhost:6166/metrics
 # 参数说明
@@ -134,7 +127,7 @@ go_mysql_sr_write_delay_time_seconds 1
 # 写入目的端消息数（累加）
 go_mysql_sr_write_processed_ops_total 6924
 ```
-7.2 prometheus配置参考
+6.2 prometheus配置参考
 ```shell
 scrape_configs:
   # 新增go-mysql-sr的job_name
@@ -142,32 +135,32 @@ scrape_configs:
     static_configs:
       - targets: ["host.docker.internal:6166", "host.docker.internal:6167"]
 ```
-7.3 grafana dashboard 监控，json file下载 [grafana-goMysqlSr-dashboard.json](configs/grafana-goMysqlSr-dashboard.json)
+6.3 grafana dashboard 监控，json file下载 [grafana-goMysqlSr-dashboard.json](configs/grafana-goMysqlSr-dashboard.json)
 ![](docs/img/grafana.png)
 
-#### 8. API
-8.1 新增同步表（增量）
+#### 7. API
+7.1 新增同步表（增量）
 ```shell
 # 增量同步
 curl localhost:6166/api/addRule -d '{"source-schema": "mysql_test","source-table": "tb3", "target-schema": "starrocks_test", "target-table": "tb3"}'
 ```
 *result: add rule handle successfully.*
 
-8.1 新增同步表（全量+增量）
+7.2 新增同步表（全量+增量）
 ```shell
 # 需要指定同步参数 full_sync: true
 # 当指定full_sync为true时，新增同步表全量数据同步期间会暂停整个同步任务的output write，延迟会增加，等新增同步表全量写入完成后output write恢复；延迟多少跟新增同步表的数据量有关
 curl localhost:6166/api/addRule -d '{"source-schema": "mysql_test","source-table": "tb3", "target-schema": "starrocks_test", "target-table": "tb3", "full_sync": true}'
 ```
-*result: add rule handle successfully.*
+*result: add rule handle successfully, full sync rows: 100.*
 
-8.2 删除同步表
+7.3 删除同步表
 ```shell
 curl localhost:6166/api/delRule -d '{"source-schema": "mysql_test","source-table": "tb3"}'
 ```
 *result: delete rule handle successfully.*
 
-8.3 查询同步表
+7.4 查询同步表
 ```shell
 curl -s localhost:6166/api/getRule | python -m json.tool
 ```
@@ -201,13 +194,13 @@ curl -s localhost:6166/api/getRule | python -m json.tool
 }
 ```
 
-8.4 暂停同步
+7.5 暂停同步
 ```shell
 curl localhost:6166/api/pause
 ```
 *result: pause handle successfully.*
 
-8.5 恢复同步
+7.6 恢复同步
 ```shell
 curl localhost:6166/api/resume
 ```

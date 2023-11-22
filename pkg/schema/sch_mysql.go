@@ -210,6 +210,7 @@ func (mts *MysqlTables) NewSchemaTables(conf *config.BaseConfig, pluginConfig ma
 		for i := 0; i < idr.RowNumber(); i++ {
 			db, _ := idr.GetString(i, 0)
 			ddl, _ := idr.GetString(i, 1)
+			log.Debugf("handle increment ddl: %v", ddl)
 			err = mts.incrementDdlExec(db, "", ddl)
 			if err != nil {
 				log.Warnf("handle increment ddl failed, ddl: %v, err: %v", ddl, err.Error())
@@ -303,7 +304,7 @@ func (mts *MysqlTables) GetTableCreateDDL(db string, table string) (string, erro
 	return createDDL, nil
 }
 
-func (mts *MysqlTables) UpdateTable(db string, table string, ddl interface{}, pos string) (err error) {
+func (mts *MysqlTables) UpdateTable(db string, table string, ddl interface{}, pos string, index int) (err error) {
 	if err = mts.memConn.UseDB(db); err != nil {
 		// db not found handle: create database
 		if strings.Contains(err.Error(), "database not found") {
@@ -325,8 +326,8 @@ func (mts *MysqlTables) UpdateTable(db string, table string, ddl interface{}, po
 		return err
 	}
 	insSql := fmt.Sprintf("insert ignore "+
-		"into `%s`.table_increment_ddl(`pos_id`, `db`, `table_ddl`, `ddl_pos`)values(?, ?, ?, ?)", position.DbName)
-	_, err = mts.ExecuteSQLForMetaDB(insSql, mts.posId, db, fmt.Sprintf("%v", ddl), pos)
+		"into `%s`.table_increment_ddl(`pos_id`, `db`, `table_name`, `table_ddl`, `ddl_pos`, serial_number)values(?,?,?,?,?,?)", position.DbName)
+	_, err = mts.ExecuteSQLForMetaDB(insSql, mts.posId, db, table, fmt.Sprintf("%v", ddl), pos, index)
 	if err != nil {
 		return err
 	}

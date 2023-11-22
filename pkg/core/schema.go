@@ -11,7 +11,7 @@ type Schema interface {
 	AddTableForMsg(msg *msg.Msg) error
 	AddTable(db string, table string) (*schema.Table, error)
 	DelTable(db string, table string) error
-	UpdateTable(db string, table string, args interface{}, pos string) error
+	UpdateTable(db string, table string, args interface{}, pos string, index int) error
 	GetTable(db string, table string) (*schema.Table, error)
 	RefreshTable(db string, table string)
 	SaveMeta(data string) error

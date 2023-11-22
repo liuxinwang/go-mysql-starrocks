@@ -83,7 +83,7 @@ func (mts *MongoTables) DelTable(db string, table string) error {
 	return nil
 }
 
-func (mts *MongoTables) UpdateTable(db string, table string, args interface{}, pos string) (err error) {
+func (mts *MongoTables) UpdateTable(db string, table string, args interface{}, pos string, index int) (err error) {
 	return nil
 }
 

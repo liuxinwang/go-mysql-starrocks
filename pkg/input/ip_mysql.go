@@ -246,7 +246,7 @@ func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replicatio
 	log.Debugf("ddl event: %v", ddl)
 	for _, stmt := range stmts {
 		ns := mi.parseStmt(stmt)
-		for _, n := range ns {
+		for nsIndex, n := range ns {
 			if n.db == "" {
 				n.db = db
 			}
@@ -297,18 +297,20 @@ func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replicatio
 			}
 
 			if isHandleDDL {
-				log.Infof("handle ddl event: %v", ddl)
 				// fix github.com/dolthub/go-mysql-server not support column charset
 				// reg, _ := regexp.Compile("charset \\w*")
 				reg, _ := regexp.Compile("(?i)charset `?\\w*`?")
 				// reg, _ := regexp.Compile("(?i)charset `?\\w*`?|(?i)collate `?\\w*`?")
 				ddl = reg.ReplaceAllString(ddl, "")
 
+				newDdl := ddl
+
 				// handle rename table
 				if n.newDb != "" {
-					ddl = fmt.Sprintf("rename table %s.%s to %s.%s", n.db, n.table, n.newDb, n.newTable)
+					newDdl = fmt.Sprintf("rename table %s.%s to %s.%s", n.db, n.table, n.newDb, n.newTable)
 				}
-				err = mi.inSchema.UpdateTable(n.db, n.table, ddl, gtid)
+				log.Infof("handle ddl event: %v", newDdl)
+				err = mi.inSchema.UpdateTable(n.db, n.table, newDdl, gtid, nsIndex)
 				if err != nil {
 					log.Errorf("handle query(%s) err %v", queryEvent.Query, err)
 				}
