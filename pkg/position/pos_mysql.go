@@ -206,12 +206,14 @@ func (pos *MysqlPosition) initDb() {
 			"`id` int(11) NOT NULL AUTO_INCREMENT,"+
 			"`pos_id` int(11) NOT NULL,"+
 			"`db` varchar(50) NOT NULL,"+
+			"`table_name` varchar(255) DEFAULT NULL COMMENT '',"+
 			"`table_ddl` text,"+
 			"`ddl_pos` varchar(500),"+
+			"`serial_number` int UNSIGNED not null DEFAULT '0' comment '',"+
 			"`created_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP,"+
 			"`updated_at` datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,"+
 			"PRIMARY KEY (`id`),"+
-			"UNIQUE KEY `uniq_posid_ddlpos` (`pos_id`,`ddl_pos`))", DbName)
+			"UNIQUE KEY `uk_posid_ddlpos_serialnumber` (`pos_id`,`ddl_pos`,`serial_number`))", DbName)
 		_, err = pos.executeSQL(tidTaSql)
 		if err != nil {
 			log.Fatal("init `table_increment_ddl` table failed. err: ", err.Error())
