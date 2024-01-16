@@ -381,7 +381,6 @@ func (sr *Starrocks) SendData(content []string, table *schema.Table, targetSchem
 		return errors.Trace(err)
 	}
 	if returnMap["Status"] != "Success" {
-		log.Error(err.Error())
 		message := returnMap["Message"]
 		errorUrl := returnMap["ErrorURL"]
 		errorMsg := message.(string) +
