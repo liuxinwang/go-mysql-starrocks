@@ -1,4 +1,4 @@
-FROM golang:1.18-alpine as builder
+FROM golang:1.19-alpine as builder
 ENV TZ=Asia/Shanghai
 ENV LANG="en_US.UTF-8"
 RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
@@ -12,6 +12,7 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o /go-mysql-sr ./cmd/go_mysq
 FROM alpine
 ENV TZ=Asia/Shanghai
 ENV LANG="en_US.UTF-8"
+RUN sed -i 's/dl-cdn.alpinelinux.org/mirrors.aliyun.com/g' /etc/apk/repositories
 WORKDIR /app
 COPY --from=builder /go-mysql-sr ./go-mysql-sr
 
