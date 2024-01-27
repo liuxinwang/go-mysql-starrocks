@@ -672,12 +672,18 @@ func (mts *MysqlTables) getTimestampForGtid(gtid string) uint32 {
 	if gs, err = mysql.ParseGTIDSet("mysql", gtid); err != nil {
 		log.Fatal(err)
 	}
-	streamer, _ := syncer.StartSyncGTID(gs)
+	streamer, err := syncer.StartSyncGTID(gs)
+	if err != nil {
+		log.Fatalf("start sync gtid failed, err: %v", err.Error())
+	}
 
 	var gtidTimestamp uint32
 
 	for {
-		ev, _ := streamer.GetEvent(context.Background())
+		ev, err := streamer.GetEvent(context.Background())
+		if err != nil {
+			log.Fatalf("streamer get event failed, err: %v", err.Error())
+		}
 		// Dump event
 		// ev.Dump(os.Stdout)
 		if ev.Header.EventType == replication.GTID_EVENT {

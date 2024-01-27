@@ -199,8 +199,21 @@ func (ds *Doris) Execute(msgs []*msg.Msg, table *schema.Table, targetSchema stri
 	for _, s := range jsonList {
 		log.Debugf("doris custom %s.%s row data: %v", targetSchema, targetTable, s)
 	}
-	//TODO ignoreColumns handle
-	return ds.SendData(jsonList, table, targetSchema, targetTable, nil)
+
+	var err error
+	for i := 0; i < RetryCount; i++ {
+		err = ds.SendData(jsonList, table, targetSchema, targetTable, nil)
+		if err != nil {
+			log.Warnf("send data failed, err: %v, execute retry...", err.Error())
+			if i+1 == RetryCount {
+				break
+			}
+			time.Sleep(time.Duration(RetryInterval*(i+1)) * time.Second)
+			continue
+		}
+		break
+	}
+	return err
 }
 
 func (ds *Doris) Close() {
