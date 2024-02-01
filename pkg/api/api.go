@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"github.com/go-mysql-org/go-mysql/client"
 	"github.com/go-mysql-org/go-mysql/mysql"
+	jsoniter "github.com/json-iterator/go"
 	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/core"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/input"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/output"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
 	"github.com/siddontang/go-log/log"
@@ -226,7 +228,7 @@ func DelRuleHandle(ip core.Input, oo core.Output, schema core.Schema) func(http.
 		delRuleFmt, _ := json.Marshal(delRule)
 		log.Infof("delete rule map: %v", string(delRuleFmt))
 
-		// schema table add
+		// schema table del
 		sourceSchema := fmt.Sprintf("%v", delRule["source-schema"])
 		sourceTable := fmt.Sprintf("%v", delRule["source-table"])
 		err = schema.DelTable(sourceSchema, sourceTable)
@@ -406,9 +408,11 @@ func FullSync(ip core.Input, oo core.Output, ruleMap map[string]interface{}, s c
 					m[columns[idx]] = ret
 				}
 				m[output.DeleteColumn] = 0
-				b, _ := json.Marshal(m)
+				b, _ := jsoniter.Marshal(m)
 				jsonRows = append(jsonRows, string(b))
 				tmpIndex += 1
+				// prom read event number counter
+				metrics.OpsReadProcessed.Inc()
 				if tmpIndex%batchSize == 0 {
 					err = outputPlugin.SendData(jsonRows, tableObj, targetSchema, targetTable, nil)
 					if err != nil {
@@ -446,9 +450,11 @@ func FullSync(ip core.Input, oo core.Output, ruleMap map[string]interface{}, s c
 					m[columns[idx]] = ret
 				}
 				m[output.DeleteColumn] = 0
-				b, _ := json.Marshal(m)
+				b, _ := jsoniter.Marshal(m)
 				jsonRows = append(jsonRows, string(b))
 				tmpIndex += 1
+				// prom read event number counter
+				metrics.OpsReadProcessed.Inc()
 				if tmpIndex%batchSize == 0 {
 					err = outputPlugin.SendData(jsonRows, tableObj, targetSchema, targetTable, nil)
 					if err != nil {
