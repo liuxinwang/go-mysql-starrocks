@@ -157,6 +157,11 @@ func (sr *Starrocks) StartOutput(outputChan *channel.OutputChannel) {
 				tableObj, err := sr.inSchema.GetTable(ruleMap.SourceSchema, ruleMap.SourceTable)
 				// tableObj, err := sr.GetTable(ruleMap.TargetSchema, ruleMap.TargetTable)
 				if err != nil {
+					// get rule Deleted, if true continue (api delete sync table) bug fix #21
+					if ruleMap.Deleted {
+						delete(schemaTableEvents, schemaTable)
+						continue
+					}
 					log.Fatal(err)
 				}
 
@@ -168,16 +173,6 @@ func (sr *Starrocks) StartOutput(outputChan *channel.OutputChannel) {
 				}
 				delete(schemaTableEvents, schemaTable)
 			}
-
-			// only start lastCtlMsg is nil
-			/*if sr.lastCtlMsg == nil {
-				if sr.close {
-					log.Infof("not found lastCtlMsg and output data, not last one flush.")
-					return
-				} else {
-					continue
-				}
-			}*/
 
 			if sr.lastCtlMsg.AfterCommitCallback != nil {
 				err := sr.lastCtlMsg.AfterCommitCallback(sr.lastCtlMsg)
