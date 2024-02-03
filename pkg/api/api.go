@@ -18,6 +18,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 func AddRuleHandle(ip core.Input, oo core.Output, schema core.Schema) func(http.ResponseWriter, *http.Request) {
@@ -357,18 +358,6 @@ func FullSync(ip core.Input, oo core.Output, ruleMap map[string]interface{}, s c
 			primaryKeyColumns = append(primaryKeyColumns, columnName)
 		}
 
-		/* if rs.RowNumber() > 1 {
-			log.Errorf("handling multiple primary keys is not currently supported")
-			return errors.New("handling multiple primary keys is not currently supported")
-		}
-
-		primaryKeyColumnName, _ := rs.GetString(0, 0)
-		primaryKeyDataType, _ := rs.GetString(0, 1)
-		if !strings.Contains(primaryKeyDataType, "int") {
-			log.Errorf("handling primary key not int type is not currently supported")
-			return errors.New("handling primary key not int type is not currently supported")
-		} */
-
 		queryColumnsSql := fmt.Sprintf("SELECT COLUMN_NAME "+
 			"FROM information_schema.columns "+
 			"WHERE table_schema = '%s' "+
@@ -389,10 +378,16 @@ func FullSync(ip core.Input, oo core.Output, ruleMap map[string]interface{}, s c
 		batchSize := 10000
 		tmpIndex := 0
 		var jsonRows []string
+		var totalSize int32
 		tableObj, err := s.GetTable(sourceSchema, sourceTable)
 		if err != nil {
 			return err, 0
 		}
+
+		stopTickerChan := make(chan interface{}, 1)
+		defer close(stopTickerChan)
+		timerPrintFullSyncDataRows(stopTickerChan, targetSchema, targetTable, &fullRows)
+
 		switch outputPlugin := oo.(type) {
 		case *output.Doris:
 			err = conn.ExecuteSelectStreaming(querySql, &result, func(row []mysql.FieldValue) error {
@@ -451,17 +446,20 @@ func FullSync(ip core.Input, oo core.Output, ruleMap map[string]interface{}, s c
 				}
 				m[output.DeleteColumn] = 0
 				b, _ := jsoniter.Marshal(m)
+				totalSize = totalSize + int32(len(b))
 				jsonRows = append(jsonRows, string(b))
 				tmpIndex += 1
 				// prom read event number counter
 				metrics.OpsReadProcessed.Inc()
-				if tmpIndex%batchSize == 0 {
+				// row lines = 10000 || totalSize >= 90M, 避免超过100M写入失败 (fix #23 )
+				if tmpIndex%batchSize == 0 || totalSize >= 94371840 {
 					err = outputPlugin.SendData(jsonRows, tableObj, targetSchema, targetTable, nil)
 					if err != nil {
 						return err
 					}
 					fullRows = tmpIndex
 					jsonRows = jsonRows[0:0]
+					totalSize = 0
 				}
 				return nil
 			}, nil)
@@ -490,4 +488,21 @@ func FullSync(ip core.Input, oo core.Output, ruleMap map[string]interface{}, s c
 	}
 	log.Infof("end handle full data sync")
 	return nil, fullRows
+}
+
+func timerPrintFullSyncDataRows(stopTickerChan chan interface{}, targetSchema string, targetTable string, fullRows *int) {
+	// timer print full sync data rows
+	ticker := time.NewTicker(time.Second * 3)
+	go func() {
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				log.Infof("full sync data %s.%s rows: %d", targetSchema, targetTable, *fullRows)
+			case <-stopTickerChan:
+				log.Debugf("quit print full sync data rows goroutine")
+				return
+			}
+		}
+	}()
 }
