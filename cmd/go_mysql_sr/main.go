@@ -6,7 +6,6 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/app"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
-	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/utils"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sevlyar/go-daemon"
@@ -50,10 +49,6 @@ func main() {
 				log.Fatal("daemon release error: ", err)
 			}
 		}(cntxt)
-	}
-
-	if help.MetaDbPort != nil {
-		schema.MemDbPort = *help.MetaDbPort
 	}
 
 	// 进程信号处理
