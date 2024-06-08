@@ -1,7 +1,7 @@
 package utils
 
 import (
-	"github.com/pingcap/errors"
+	"github.com/juju/errors"
 	"reflect"
 )
 

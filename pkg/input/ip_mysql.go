@@ -15,9 +15,9 @@ import (
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/position"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/registry"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/rule"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/schema"
 	"github.com/mitchellh/mapstructure"
-	"github.com/pingcap/parser"
-	"github.com/pingcap/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser"
 	"github.com/siddontang/go-log/log"
 	"regexp"
 	"sync"
@@ -239,84 +239,66 @@ func (mi *MysqlInputPlugin) OnDDL(nextPos mysql.Position, queryEvent *replicatio
 	gtid := queryEvent.GSet.String()
 	db := string(queryEvent.Schema)
 	ddl := string(queryEvent.Query)
-	stmts, _, err := mi.parser.Parse(ddl, "", "")
+	ddlStmts, err := schema.DdlToDdlStatements(ddl, db)
 	if err != nil {
 		log.Fatalf("parse query(%s) err %v", queryEvent.Query, err)
 	}
 	log.Debugf("ddl event: %v", ddl)
-	for _, stmt := range stmts {
-		ns := mi.parseStmt(stmt)
-		for nsIndex, n := range ns {
-			if n.db == "" {
-				n.db = db
-			}
-			// filter meta db _go_mysql_sr
-			if n.db == position.DbName {
-				continue
+	for nsIndex, ddlStmt := range ddlStmts {
+		// filter meta db _go_mysql_sr
+		if ddlStmt.Schema == position.DbName {
+			continue
+		}
+
+		// schema table reg
+		reg, err := regexp.Compile(rule.SchemaTableToStrRegex(ddlStmt.Schema, ddlStmt.Name))
+		if err != nil {
+			log.Fatalf("parse schema table regexp err %v", err.Error())
+		}
+
+		isHandleDDL := false
+		for _, regex := range mi.canal.GetIncludeTableRegex() {
+			if regex.String() == reg.String() {
+				isHandleDDL = true
+				break
 			}
 
-			// schema table reg
-			reg, err := regexp.Compile(rule.SchemaTableToStrRegex(n.db, n.table))
+			regexToSchema, regexToTable := rule.StrRegexToSchemaTable(regex.String())
+			// aliyun dms online ddl reg
+			aliyunDMSOnlineDdlRegStr := fmt.Sprintf("^tp_\\d+_(ogt|del|ogl)_%s$", regexToTable)
+			aliyunDMSOnlineDdlReg, err := regexp.Compile(aliyunDMSOnlineDdlRegStr)
 			if err != nil {
-				log.Fatalf("parse schema table regexp err %v", err.Error())
+				log.Fatalf("parse aliyun dms online ddl regexp err %v", err.Error())
 			}
-
-			isHandleDDL := false
-			for _, regex := range mi.canal.GetIncludeTableRegex() {
-				if regex.String() == reg.String() {
-					isHandleDDL = true
-					break
-				}
-
-				regexToSchema, regexToTable := rule.StrRegexToSchemaTable(regex.String())
-				// aliyun dms online ddl reg
-				aliyunDMSOnlineDdlRegStr := fmt.Sprintf("^tp_\\d+_(ogt|del|ogl)_%s$", regexToTable)
-				aliyunDMSOnlineDdlReg, err := regexp.Compile(aliyunDMSOnlineDdlRegStr)
-				if err != nil {
-					log.Fatalf("parse aliyun dms online ddl regexp err %v", err.Error())
-				}
-				// aliyun dms online ddl reg2
-				aliyunDMSOnlineDdlReg2Str := fmt.Sprintf("^tpa_[a-z0-9]+_%v$", regexToTable)
-				aliyunDMSOnlineDdlReg2, err := regexp.Compile(aliyunDMSOnlineDdlReg2Str)
-				if err != nil {
-					log.Fatalf("parse aliyun dms online ddl regexp err %v", err.Error())
-				}
-				// gh-ost online ddl reg
-				ghostOnlineDdlRegStr := fmt.Sprintf("^_%s_(gho|ghc|del)$", regexToTable)
-				ghostOnlineDdlReg, err := regexp.Compile(ghostOnlineDdlRegStr)
-				if err != nil {
-					log.Fatalf("parse gh-ost online ddl regexp err %v", err.Error())
-				}
-				if n.db == regexToSchema &&
-					(aliyunDMSOnlineDdlReg.MatchString(n.table) ||
-						aliyunDMSOnlineDdlReg2.MatchString(n.table) ||
-						ghostOnlineDdlReg.MatchString(n.table)) {
-					isHandleDDL = true
-					break
-				}
+			// aliyun dms online ddl reg2
+			aliyunDMSOnlineDdlReg2Str := fmt.Sprintf("^tpa_[a-z0-9]+_%v$", regexToTable)
+			aliyunDMSOnlineDdlReg2, err := regexp.Compile(aliyunDMSOnlineDdlReg2Str)
+			if err != nil {
+				log.Fatalf("parse aliyun dms online ddl regexp err %v", err.Error())
 			}
-
-			if isHandleDDL {
-				// fix github.com/dolthub/go-mysql-server not support column charset
-				// reg, _ := regexp.Compile("charset \\w*")
-				reg, _ := regexp.Compile("(?i)charset `?\\w*`?")
-				// reg, _ := regexp.Compile("(?i)charset `?\\w*`?|(?i)collate `?\\w*`?")
-				ddl = reg.ReplaceAllString(ddl, "")
-
-				newDdl := ddl
-
-				// handle rename table
-				if n.newDb != "" {
-					newDdl = fmt.Sprintf("rename table %s.%s to %s.%s", n.db, n.table, n.newDb, n.newTable)
-				}
-				log.Infof("handle ddl event: %v", newDdl)
-				err = mi.inSchema.UpdateTable(n.db, n.table, newDdl, gtid, nsIndex)
-				if err != nil {
-					log.Errorf("handle query(%s) err %v", queryEvent.Query, err)
-				}
-			} else {
-				log.Debugf("filter ddl event, ddl non-sync table, ddl: %v", ddl)
+			// gh-ost online ddl reg
+			ghostOnlineDdlRegStr := fmt.Sprintf("^_%s_(gho|ghc|del)$", regexToTable)
+			ghostOnlineDdlReg, err := regexp.Compile(ghostOnlineDdlRegStr)
+			if err != nil {
+				log.Fatalf("parse gh-ost online ddl regexp err %v", err.Error())
 			}
+			if ddlStmt.Schema == regexToSchema &&
+				(aliyunDMSOnlineDdlReg.MatchString(ddlStmt.Name) ||
+					aliyunDMSOnlineDdlReg2.MatchString(ddlStmt.Name) ||
+					ghostOnlineDdlReg.MatchString(ddlStmt.Name)) {
+				isHandleDDL = true
+				break
+			}
+		}
+
+		if isHandleDDL {
+			log.Infof("handle ddl event: %v", ddlStmt.RawSql)
+			err = mi.inSchema.UpdateTable(ddlStmt.Schema, ddlStmt.Name, ddlStmt.RawSql, gtid, nsIndex)
+			if err != nil {
+				log.Errorf("handle query(%s) err %v", queryEvent.Query, err)
+			}
+		} else {
+			log.Debugf("filter ddl event, ddl non-sync table, ddl: %v", ddl)
 		}
 	}
 	return nil
@@ -494,40 +476,4 @@ func (mi *MysqlInputPlugin) promTimingMetrics() {
 			}
 		}
 	}()
-}
-
-func (mi *MysqlInputPlugin) parseStmt(stmt ast.StmtNode) (ns []*node) {
-	switch t := stmt.(type) {
-	case *ast.RenameTableStmt:
-		for _, tableInfo := range t.TableToTables {
-			n := &node{
-				db:       tableInfo.OldTable.Schema.String(),
-				table:    tableInfo.OldTable.Name.String(),
-				newDb:    tableInfo.NewTable.Schema.String(),
-				newTable: tableInfo.NewTable.Name.String(),
-			}
-			ns = append(ns, n)
-		}
-	case *ast.AlterTableStmt:
-		n := &node{
-			db:    t.Table.Schema.String(),
-			table: t.Table.Name.String(),
-		}
-		ns = []*node{n}
-	case *ast.DropTableStmt:
-		for _, table := range t.Tables {
-			n := &node{
-				db:    table.Schema.String(),
-				table: table.Name.String(),
-			}
-			ns = append(ns, n)
-		}
-	case *ast.CreateTableStmt:
-		n := &node{
-			db:    t.Table.Schema.String(),
-			table: t.Table.Name.String(),
-		}
-		ns = []*node{n}
-	}
-	return ns
 }

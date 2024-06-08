@@ -3,9 +3,9 @@ package filter
 import (
 	"encoding/json"
 	"fmt"
+	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/utils"
-	"github.com/pingcap/errors"
 	"github.com/siddontang/go-log/log"
 )
 

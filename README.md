@@ -5,6 +5,7 @@
 ![](https://img.shields.io/badge/build-prerelease-brightgreen.svg)
 [![Release](https://img.shields.io/github/release/liuxinwang/go-mysql-starrocks.svg?style=flat-square)](https://github.com/liuxinwang/go-mysql-starrocks/releases)
 
+#### 欢迎试用 [qin-cdc](https://github.com/sqlpub/qin-cdc)，重构插件化架构，支持更多数据源。
 
 ### 使用说明
 #### 环境准备

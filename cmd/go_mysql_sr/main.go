@@ -12,6 +12,7 @@ import (
 	"github.com/sevlyar/go-daemon"
 	"github.com/siddontang/go-log/log"
 	"net/http"
+	_ "net/http/pprof"
 	"os"
 	"os/signal"
 	"syscall"

@@ -1,7 +1,7 @@
 package msg
 
 import (
-	"github.com/pingcap/parser/ast"
+	"github.com/pingcap/tidb/pkg/parser/ast"
 	"time"
 )
 

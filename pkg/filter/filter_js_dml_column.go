@@ -3,8 +3,8 @@ package filter
 import (
 	"fmt"
 	"github.com/dop251/goja"
+	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
-	"github.com/pingcap/errors"
 	"github.com/siddontang/go-log/log"
 	"os"
 )

@@ -1,6 +1,7 @@
 package schema
 
 import (
+	"encoding/json"
 	"github.com/juju/errors"
 	"github.com/siddontang/go-log/log"
 )
@@ -21,21 +22,42 @@ const (
 	TypeBit                             // bit
 	TypeJson                            // json
 	TypeDecimal                         // decimal
+	TypeBinary                          // binary
 )
 
 var MemDbHost = "localhost"
 var MemDbPort = 5166 // default 5166
 
 type Table struct {
-	Schema  string        `toml:"schema" json:"schema"`
-	Name    string        `toml:"name" json:"name"`
-	Columns []TableColumn `toml:"columns" json:"columns"`
+	Schema            string        `toml:"schema" json:"schema"`
+	Name              string        `toml:"name" json:"name"`
+	Comment           string        `toml:"comment" json:"comment"`
+	Columns           []TableColumn `toml:"columns" json:"columns"`
+	PrimaryKeyColumns []TableColumn `toml:"primary_key_columns" json:"primary_key_columns"`
 }
 
 type TableColumn struct {
-	Name    string     `toml:"name" json:"name"`
-	Type    ColumnType `toml:"type" json:"type"`
-	RawType string     `toml:"raw_type" json:"raw_type"`
+	Name         string     `toml:"name" json:"name"`
+	Type         ColumnType `toml:"type" json:"type"`
+	RawType      string     `toml:"raw_type" json:"raw_type"`
+	Comment      string     `toml:"comment" json:"comment"`
+	IsPrimaryKey bool       `toml:"is_primary_key" json:"is_primary_key"`
+}
+
+type DdlStatement struct {
+	Schema            string `toml:"schema" json:"schema"`
+	Name              string `toml:"name" json:"name"`
+	RawSql            string `toml:"raw_sql" json:"raw_sql"`
+	IsCreateTable     bool   `toml:"is_create_table" json:"is_create_table"`
+	IsLikeCreateTable bool   `toml:"is_like_create_table" json:"is_like_create_table"`
+	ReferTable        struct {
+		Schema string `toml:"schema" json:"schema"`
+		Name   string `toml:"name" json:"name"`
+	} `toml:"refer_table" json:"refer_table"`
+	IsSelectCreateTable bool   `toml:"is_select_create_table" json:"is_select_create_table"`
+	SelectRawSql        string `toml:"select_raw_sql" json:"select_raw_sql"`
+	IsDropTable         bool   `toml:"is_drop_table" json:"is_drop_table"`
+	IsRenameTable       bool   `toml:"is_rename_table" json:"is_rename_table"`
 }
 
 func (t *Table) GetTableColumnsName() []string {
@@ -63,4 +85,15 @@ func (t *Table) DelColumn(name string) error {
 		return nil
 	}
 	return errors.New("column: %s not found")
+}
+
+func (t *Table) ToString() string {
+	if t == nil {
+		return ""
+	}
+	marshal, err := json.Marshal(t)
+	if err != nil {
+		return ""
+	}
+	return string(marshal)
 }

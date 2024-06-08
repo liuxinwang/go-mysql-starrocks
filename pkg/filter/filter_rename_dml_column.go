@@ -2,9 +2,9 @@ package filter
 
 import (
 	"fmt"
+	"github.com/juju/errors"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/msg"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/utils"
-	"github.com/pingcap/errors"
 )
 
 const RenameDmlColumnFilterName = "rename-dml-column"
