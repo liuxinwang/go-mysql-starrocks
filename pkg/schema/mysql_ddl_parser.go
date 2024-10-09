@@ -24,6 +24,10 @@ func parse(sql string) (*ast.StmtNode, error) {
 		return nil, err
 	}
 
+	if len(stmtNodes) != 1 {
+		return nil, errors.New("expecting single stmt node")
+	}
+
 	return &stmtNodes[0], nil
 }
 

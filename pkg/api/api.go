@@ -7,6 +7,7 @@ import (
 	"github.com/go-mysql-org/go-mysql/mysql"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/juju/errors"
+	"github.com/liuxinwang/go-mysql-starrocks/pkg/config"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/core"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/input"
 	"github.com/liuxinwang/go-mysql-starrocks/pkg/metrics"
@@ -20,6 +21,26 @@ import (
 	"strings"
 	"time"
 )
+
+func GetConfigHandle(conf *config.BaseConfig, oo core.Output) func(http.ResponseWriter, *http.Request) {
+	return func(w http.ResponseWriter, r *http.Request) {
+		marshal, err := json.Marshal(conf)
+		if err != nil {
+			_, err = w.Write([]byte(fmt.Sprintf("result: config to json err: %v\n", err.Error())))
+			if err != nil {
+				log.Errorf("http response write err: ", err.Error())
+				return
+			}
+			return
+		}
+		_, err = w.Write(marshal)
+		if err != nil {
+			log.Errorf("http response write err: ", err.Error())
+			return
+		}
+		return
+	}
+}
 
 func AddRuleHandle(ip core.Input, oo core.Output, schema core.Schema) func(http.ResponseWriter, *http.Request) {
 	return func(w http.ResponseWriter, r *http.Request) {

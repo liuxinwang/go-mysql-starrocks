@@ -87,6 +87,7 @@ func main() {
 	}
 
 	// api handle
+	http.HandleFunc("/api/getConfig", api.GetConfigHandle(baseConfig, s.Output))
 	http.HandleFunc("/api/addRule", api.AddRuleHandle(s.Input, s.Output, s.InputSchema))
 	http.HandleFunc("/api/delRule", api.DelRuleHandle(s.Input, s.Output, s.InputSchema))
 	http.HandleFunc("/api/getRule", api.GetRuleHandle(s.Output))
