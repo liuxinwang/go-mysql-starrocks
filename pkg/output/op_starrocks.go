@@ -371,7 +371,7 @@ func (sr *Starrocks) SendData(content []string, table *schema.Table, targetSchem
 		if sr.isContain(ignoreColumns, column.Name) {
 			continue
 		}
-		columnArray = append(columnArray, column.Name)
+		columnArray = append(columnArray, "`"+column.Name+"`")
 	}
 	columnArray = append(columnArray, DeleteColumn)
 	columns := fmt.Sprintf("%s, __op = %s", strings.Join(columnArray, ","), DeleteColumn)
