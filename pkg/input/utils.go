@@ -18,7 +18,7 @@ func deserialize(raw interface{}, column schema.TableColumn) interface{} {
 	}
 
 	ret := raw
-	if column.RawType == "text" || column.RawType == "json" {
+	if column.RawType == "text" || column.RawType == "longtext" || column.RawType == "mediumtext" || column.RawType == "json" {
 		_, ok := raw.([]uint8)
 		if ok {
 			ret = string(raw.([]uint8))
@@ -33,7 +33,7 @@ func deserializeForLocal(raw interface{}, column schema2.TableColumn) interface{
 	}
 
 	ret := raw
-	if column.RawType == "text" || column.RawType == "json" {
+	if column.RawType == "text" || column.RawType == "longtext" || column.RawType == "mediumtext" || column.RawType == "json" {
 		_, ok := raw.([]uint8)
 		if ok {
 			ret = string(raw.([]uint8))

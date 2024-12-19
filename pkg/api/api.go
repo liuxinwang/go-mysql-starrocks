@@ -460,7 +460,13 @@ func FullSync(ip core.Input, oo core.Output, ruleMap map[string]interface{}, s c
 					if val.Type == 4 {
 						_, ok := val.Value().([]uint8)
 						if ok {
-							ret = string(val.Value().([]uint8))
+							if tableObj.Columns[idx].RawType == "json" {
+								jsonCol := map[string]interface{}{}
+								_ = json.Unmarshal(val.Value().([]uint8), &jsonCol)
+								ret = jsonCol
+							} else {
+								ret = string(val.Value().([]uint8))
+							}
 						}
 					}
 					m[columns[idx]] = ret
